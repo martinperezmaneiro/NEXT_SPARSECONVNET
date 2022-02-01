@@ -2,9 +2,9 @@
 
 # -- Project information
 
-project = 'NEXT_SPARSECONVNET'
-copyright = '2021'
-author = 'M.Kekic, M.Perez'
+project = 'Lumache'
+copyright = '2021, Graziella'
+author = 'Graziella'
 
 release = '0.1'
 version = '0.1.0'

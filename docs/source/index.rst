@@ -1,5 +1,24 @@
-This is the NEXT_SPARSECONVNET documentation page!
-=================================================
+Welcome to Lumache's documentation!
+===================================
 
-**NEXT_SPARSECONVNET** is a Python module that implements neural networks
-using the SparseConvNet library, which is suitable for NEXT kind of data.
+**Lumache** (/lu'make/) is a Python library for cooks and food lovers
+that creates recipes mixing random ingredients.
+It pulls data from the `Open Food Facts database <https://world.openfoodfacts.org/>`_
+and offers a *simple* and *intuitive* API.
+
+Check out the :doc:`usage` section for further information, including
+how to :ref:`installation` the project.
+
+Lumache has its documentation hosted on Read the Docs.
+
+.. note::
+
+   This project is under active development.
+
+Contents
+--------
+
+.. toctree::
+
+   usage
+   api
