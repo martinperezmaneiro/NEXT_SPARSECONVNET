@@ -1,5 +1,5 @@
-Welcome to NEXT_SPARSEONVNET  documentation!
-===================================
+Welcome to NEXT_SPARSEONVNET documentation!
+===========================================
 
 **NEXT_SPARSECONVET** is a module for using SparseConvNet on NEXT data.
 
