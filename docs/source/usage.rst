@@ -19,7 +19,8 @@ To retrieve a list of random ingredients,
 you can use the AQUI HABIA UNA FUNCION ENTRE ``estas comillas`` function:
 
 AQUI IBA EL AUTOFUNCTION X EJEMPLO
-.. autofunction: next_sparseconvnet.utils.data_io.get_mchits
+
+.. autofunction:: next_sparseconvnet.utils.data_io.get_mchits
 
 The ``kind`` parameter should be either ``"meat"``, ``"fish"``,
 or ``"veggies"``. Otherwise, AQUI IBA UN  DOSPUNTOSPYDOSPUNTOSFUNC
