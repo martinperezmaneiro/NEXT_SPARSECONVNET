@@ -1,5 +1,5 @@
-Usage
-=====
+Operate the DNNs
+================
 
 .. _installation:
 
