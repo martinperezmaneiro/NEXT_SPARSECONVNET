@@ -7,9 +7,13 @@ build:
     
 sphinx:
   fail_on_warning: true
+  configuration: docs/source/requirements.txt
 
 formats:
   - pdf
   - epub
 
+python:
+  install:
+    - requirements: docs/source/requirements.txt
 
