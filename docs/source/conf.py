@@ -8,9 +8,9 @@ sys.path.insert(0, os.path.abspath('../..'))
 
 # -- Project information
 
-project = 'Lumache'
-copyright = '2021, Graziella'
-author = 'Graziella'
+project = 'NEXT_SPARSECONVNET'
+copyright = '2021, M.Kekic, M.Perez'
+author = 'M.Kekic, M.Perez'
 
 release = '0.1'
 version = '0.1.0'
