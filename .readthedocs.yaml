@@ -6,8 +6,7 @@ build:
     python: "3.8"
     
 sphinx:
-  fail_on_warning: true
-  configuration: docs/source/requirements.txt
+  configuration: docs/source/conf.py
 
 formats:
   - pdf
