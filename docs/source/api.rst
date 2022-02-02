@@ -5,4 +5,4 @@ API
 .. autosummary::
    :toctree: generated
 
-   next_sparseconvnet
+   next_sparseconvnet.utils.data_io
