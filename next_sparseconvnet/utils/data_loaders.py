@@ -45,6 +45,7 @@ class DataGen(torch.utils.data.Dataset):
         if not isinstance(label_type, LabelType):
             raise ValueError(f'{label_type} not recognized!')
         self.label_type = label_type
+        self.voxel_name = voxel_name
         self.events     = read_events_info(filename, nevents)
         self.bininfo    = load_dst(filename, 'DATASET', 'BinsInfo')
         self.h5in = None
@@ -55,7 +56,7 @@ class DataGen(torch.utils.data.Dataset):
         idx_ = self.events.iloc[idx].dataset_id
         if self.h5in is None:#this opens a table once getitem gets called
             self.h5in = tb.open_file(self.filename, 'r')
-        hits  = self.h5in.root.DATASET[voxel_name].read_where('dataset_id==idx_')
+        hits  = self.h5in.root.DATASET[self.voxel_name].read_where('dataset_id==idx_')
         if self.augmentation:
             transform_input(hits, self.maxbins)
         if self.label_type == LabelType.Classification:
