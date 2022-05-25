@@ -34,7 +34,7 @@ class DataGen_classification(torch.utils.data.Dataset):
 
 
 class DataGen(torch.utils.data.Dataset):
-    def __init__(self, filename, label_type, voxel_name = 'Voxels', nevents=None, augmentation = False):
+    def __init__(self, filename, label_type, table='Voxels', group='DATASET', nevents=None, augmentation = False):
         """ This class yields events from pregenerated MC file.
         Parameters:
             filename : str; filename to read
@@ -45,7 +45,8 @@ class DataGen(torch.utils.data.Dataset):
         if not isinstance(label_type, LabelType):
             raise ValueError(f'{label_type} not recognized!')
         self.label_type = label_type
-        self.voxel_name = voxel_name
+        self.table      = table
+        self.group      = group
         self.events     = read_events_info(filename, nevents)
         self.bininfo    = load_dst(filename, 'DATASET', 'BinsInfo')
         self.h5in = None
@@ -56,7 +57,7 @@ class DataGen(torch.utils.data.Dataset):
         idx_ = self.events.iloc[idx].dataset_id
         if self.h5in is None:#this opens a table once getitem gets called
             self.h5in = tb.open_file(self.filename, 'r')
-        hits  = self.h5in.root.DATASET[self.voxel_name].read_where('dataset_id==idx_')
+        hits  = self.h5in.root[self.group][self.table].read_where('dataset_id==idx_')
         if self.augmentation:
             transform_input(hits, self.maxbins)
         if self.label_type == LabelType.Classification:
@@ -91,10 +92,10 @@ def collatefn(batch):
     return  coords, energs, labels, events
 
 
-def weights_loss_segmentation(fname, nevents):
+def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET'):
     with tb.open_file(fname, 'r') as h5in:
-        dataset_id = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field='dataset_id')
-        segclass   = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field='segclass')
+        dataset_id = h5in.root[group][table].read_where('dataset_id<nevents', field='dataset_id')
+        segclass   = h5in.root[group][table].read_where('dataset_id<nevents', field='segclass')
 
     df = pd.DataFrame({'dataset_id':dataset_id, 'segclass':segclass})
     nclass = max(df.segclass)+1
