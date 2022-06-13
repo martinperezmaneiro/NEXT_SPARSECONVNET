@@ -55,8 +55,8 @@ def get_params(confname):
 
 
 if __name__ == '__main__':
-    # torch.backends.cudnn.enabled = True
-    # torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = True
     parser = ArgumentParser(description="parameters for models")
     parser.add_argument("-conf", dest = "confname", required=True,
                         help = "input file with parameters", metavar="FILE",

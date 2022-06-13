@@ -161,4 +161,5 @@ def read_events_info(filename, nevents):
             warnings.warn(UserWarning(f'length of dataset smaller than {nevents}, using full dataset'))
         else:
             events = events.iloc[:nevents]
+    events[events.binclass==2]=1 #some weird stuff happened in 2 events
     return events
