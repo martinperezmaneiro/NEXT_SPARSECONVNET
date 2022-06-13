@@ -90,32 +90,46 @@ def collatefn(batch):
     return  coords, energs, labels, events
 
 
-def weights_loss_segmentation(fname, nevents):
+def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999):
     with tb.open_file(fname, 'r') as h5in:
         dataset_id = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field='dataset_id')
         segclass   = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field='segclass')
 
     df = pd.DataFrame({'dataset_id':dataset_id, 'segclass':segclass})
     nclass = max(df.segclass)+1
-    df = df.groupby('dataset_id').segclass.apply(lambda x:np.bincount(x, minlength=nclass)/len(x))
-    mean_freq = df.mean()
-    inverse_freq = 1./mean_freq
-    return inverse_freq/sum(inverse_freq)
+    mean_freq = np.bincount(df.segclass, minlength=nclass)
+    # this is applying per event mean
+    # df = df.groupby('dataset_id').segclass.apply(lambda x:np.bincount(x, minlength=nclass)/len(x))
+    # mean_freq = df.mean()
+    if not effective_number:
+        inverse_freq = 1./mean_freq
+        return inverse_freq/sum(inverse_freq)
+    else:
+        effective_num = 1.0 - np.power(beta, mean_freq)
+        weights = (1.0 - beta) / np.array(effective_num)
+        weights = weights / np.sum(weights) * nclass
+        return weights
 
-def weights_loss_classification(fname, nevents):
+def weights_loss_classification(fname, nevents, effective_number=False, beta=0.9999):
     with tb.open_file(fname, 'r') as h5in:
         binclass   = h5in.root.DATASET.EventsInfo.cols.binclass[:]
 
     nsignal = binclass.sum()
     nbackground = len(binclass)-nsignal
-    inverse_freq = [nbackground, nsignal]
-    return inverse_freq/sum(inverse_freq)
+    freq = np.array([nbackground, nsignal])
+    if not effective_number:
+        return freq/sum(freq)
+    else:
+        effective_num = 1.0 - np.power(beta, freq)
+        weights = (1.0 - beta) / np.array(effective_num)
+        weights = weights / np.sum(weights) * 2
+        return weights
 
-def weights_loss(fname, nevents, label_type):
+def weights_loss(fname, nevents, label_type, effective_number=False):
     if label_type==LabelType.Segmentation:
-        return weights_loss_segmentation(fname, nevents)
+        return weights_loss_segmentation(fname, nevents, effective_number=effective_number)
     elif label_type == LabelType.Classification:
-        return weights_loss_classification(fname, nevents)
+        return weights_loss_classification(fname, nevents, effective_number=effective_number)
 
 def transform_input(hits, bin_max, inplace=True):
     bin_names = ['xbin', 'ybin', 'zbin']
@@ -161,5 +175,6 @@ def read_events_info(filename, nevents):
             warnings.warn(UserWarning(f'length of dataset smaller than {nevents}, using full dataset'))
         else:
             events = events.iloc[:nevents]
-    events[events.binclass==2]=1 #some weird stuff happened in 2 events
+
+    events[events.binclass==2]=1
     return events

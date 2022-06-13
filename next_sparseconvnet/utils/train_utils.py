@@ -214,13 +214,13 @@ def predict_gen(data_path, net, label_type, batch_size, nevents):
             output = net.forward((coord, ener, batch_size))
             y_pred = softmax(output).cpu().detach().numpy()
 
-            if label_type == LabelType.Classification():
+            if label_type == LabelType.Classification:
                 out_dict = dict(
                     label = label.cpu().detach().numpy(),
                     dataset_id = event,
                     prediction = y_pred)
 
-            elif label_type == LabelType.Segmentation():
+            elif label_type == LabelType.Segmentation:
                 # event is a vector of batch_size
                 # to obtain event per voxel we need to look into inside batch id (last index in coords)
                 # and find indices where id changes
