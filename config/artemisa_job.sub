@@ -1,0 +1,13 @@
+universe = vanilla
+executable              = artemisa_job_pred.sh
+arguments               =
+log                     = jobs_aux/exec.$(Cluster).$(Process).log
+output                  = jobs_aux/outfile.$(Cluster).$(Process).out
+error                   = jobs_aux/errors.$(Cluster).$(Process).err
+
+request_Memory      = 10000
+request_Cpus        = 5
+
+request_gpus = 1
+
+queue
