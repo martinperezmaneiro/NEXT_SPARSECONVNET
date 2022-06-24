@@ -25,14 +25,18 @@ def number_of_blobs(pred_dataset_path, dataset_id, threshold, class_type = 'clas
     nblobs = nx.algorithms.components.number_connected_components(vox_graph)
     return nblobs
 
-def segmentation_blob_classification(orig_dataset_path, pred_dataset_path, threshold, nevents = None, max_distance = np.sqrt(3)):
+def segmentation_blob_classification(orig_dataset_path, pred_dataset_path, threshold, nevents = None, class_type = 'class_2', max_distance = np.sqrt(3)):
     '''
     Adds a column to the events dataframe where depending on the number of blobs the predicted data had,
     events are classified as signal or background
     '''
     original_events = read_events_info(orig_dataset_path, nevents)
     original_events = original_events.assign(pred_class = original_events['dataset_id'])
-    original_events.pred_class = original_events.pred_class.apply(lambda x:number_of_blobs(pred_dataset_path, x, threshold, max_distance = max_distance)==2)
+    original_events.pred_class = original_events.pred_class.apply(lambda x:number_of_blobs(pred_dataset_path,
+                                                                                           x,
+                                                                                           threshold,
+                                                                                           class_type = class_type,
+                                                                                           max_distance = max_distance)==2)
     original_events.pred_class = original_events.pred_class.astype(int)
     return original_events
 
