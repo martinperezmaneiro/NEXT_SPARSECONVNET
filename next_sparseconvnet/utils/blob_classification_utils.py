@@ -5,15 +5,13 @@ import networkx as nx
 
 import itertools
 
-from next_sparseconvnet.utils.data_loaders             import DataGen, LabelType, read_event, read_events_info
+from next_sparseconvnet.utils.data_loaders             import DataGen, LabelType, read_events, read_events_info
 
-def number_of_blobs(pred_dataset_path, dataset_id, threshold, class_type = 'class_2', max_distance = np.sqrt(3)):
+def number_of_blobs(event_df, threshold, class_type = 'class_2', max_distance = np.sqrt(3)):
     '''
     For a prediction, returns the number of blobs for data above a threshold using graphs
     '''
-    event_df = read_event(pred_dataset_path, dataset_id, table='VoxelsPred')
-    selected_hits = pd.DataFrame()
-    selected_hits[['xbin', 'ybin', 'zbin']] = event_df[['xbin', 'ybin', 'zbin']][event_df[class_type]>threshold]
+    selected_hits = event_df[['xbin', 'ybin', 'zbin']][event_df[class_type]>threshold]
     voxels = [tuple(x) for x in selected_hits.to_numpy()]
     vox_graph = nx.Graph()
     vox_graph.add_nodes_from(voxels)
@@ -31,12 +29,15 @@ def segmentation_blob_classification(orig_dataset_path, pred_dataset_path, thres
     events are classified as signal or background
     '''
     original_events = read_events_info(orig_dataset_path, nevents)
-    original_events = original_events.assign(pred_class = original_events['dataset_id'])
-    original_events.pred_class = original_events.pred_class.apply(lambda x:number_of_blobs(pred_dataset_path,
-                                                                                           x,
-                                                                                           threshold,
-                                                                                           class_type = class_type,
-                                                                                           max_distance = max_distance)==2)
+    pred_events = read_events(pred_dataset_path, nevents, table = 'VoxelsPred')
+
+    nblobs = np.array([])
+    for idx, event_df in pred_events.groupby('dataset_id'):
+        nblobs = np.append(nblobs, number_of_blobs(event_df, threshold, class_type = class_type, max_distance = max_distance))
+
+    #this ==2 is decisive bc puts the ones with more than 2 blobs as bkg, still thinking about it
+    original_events = original_events.assign(pred_class = pd.Series(nblobs) == 2)
+
     original_events.pred_class = original_events.pred_class.astype(int)
     return original_events
 

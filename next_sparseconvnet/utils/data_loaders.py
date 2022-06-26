@@ -178,3 +178,12 @@ def read_events_info(filename, nevents):
 
     events[events.binclass==2]=1
     return events
+
+def read_events(fname, nevents, table='Voxels', group='DATASET', df=True):
+    with tb.open_file(fname) as h5in:
+        if nevents is not None:
+            hits = h5in.root[group][table].read_where('dataset_id<nevents')
+        else:
+            hits = h5in.root[group][table].read()
+
+        return pd.DataFrame.from_records(hits)
