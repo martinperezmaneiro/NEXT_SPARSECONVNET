@@ -52,7 +52,8 @@ def add_clf_labels(hits, particles):
 
 def add_seg_labels(hits, particles, delta_t=None, delta_e=None, label_dict={'track':1, 'blob':2, 'rest':0}):
     label_dict={'track':1, 'blob':2, 'rest':0}
-    hits_par = pd.merge(hits, particles, left_index=True, right_index=True)
+    #hits_par = pd.merge(hits, particles, left_index=True, right_index=True)
+    hits_par = pd.merge(hits, particles, on = ['event_id', 'particle_id'])
     per_part_info = hits_par.groupby(['event_id', 'particle_id', 'particle_name', 'creator_proc']).agg(
         {'time':[('timemin',min), ('timemax',max)], 'energy':[('energy', sum)]})
     per_part_info.columns = per_part_info.columns.get_level_values(1)
