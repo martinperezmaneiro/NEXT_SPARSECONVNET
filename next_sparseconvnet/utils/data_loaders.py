@@ -101,6 +101,11 @@ def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET'):
         dataset_id = h5in.root[group][table].read_where('dataset_id<nevents', field='dataset_id')
         segclass   = h5in.root[group][table].read_where('dataset_id<nevents', field='segclass')
 
+    #Add this because my segmentation goes from 1 to 7 but this function would need it to start in 0
+    #Temporary solution bc i plan to change the labelling to be from 0 to 6
+    #if table == 'BeershebaVoxels':
+        #segclass = segclass - 1
+
     df = pd.DataFrame({'dataset_id':dataset_id, 'segclass':segclass})
     nclass = max(df.segclass)+1
     mean_freq = np.bincount(df.segclass, minlength=nclass)
@@ -122,6 +127,7 @@ def weights_loss_classification(fname, nevents, effective_number=False, beta=0.9
 
     nsignal = binclass.sum()
     nbackground = len(binclass)-nsignal
+<<<<<<< HEAD
     freq = np.array([nbackground, nsignal])
     if not effective_number:
         return freq/sum(freq)
@@ -134,6 +140,14 @@ def weights_loss_classification(fname, nevents, effective_number=False, beta=0.9
 def weights_loss(fname, nevents, label_type, effective_number=False):
     if label_type==LabelType.Segmentation:
         return weights_loss_segmentation(fname, nevents, effective_number=effective_number)
+=======
+    inverse_freq = [nbackground, nsignal]
+    return inverse_freq/sum(inverse_freq)
+
+def weights_loss(fname, nevents, label_type, table='Voxels', group='DATASET'):
+    if label_type==LabelType.Segmentation:
+        return weights_loss_segmentation(fname, nevents, table=table, group=group)
+>>>>>>> a8d80c4 (Adapt more functions)
     elif label_type == LabelType.Classification:
         return weights_loss_classification(fname, nevents, effective_number=effective_number)
 
