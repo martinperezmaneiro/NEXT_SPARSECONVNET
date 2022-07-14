@@ -93,10 +93,14 @@ def collatefn(batch):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999):
 =======
 def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET'):
 >>>>>>> 7981e05 (Adapted all loader functions for different table names)
+=======
+def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET'):
+>>>>>>> a8d80c4e2cbaf242526e25f564233454cce922f7
     with tb.open_file(fname, 'r') as h5in:
         dataset_id = h5in.root[group][table].read_where('dataset_id<nevents', field='dataset_id')
         segclass   = h5in.root[group][table].read_where('dataset_id<nevents', field='segclass')
@@ -147,7 +151,10 @@ def weights_loss(fname, nevents, label_type, effective_number=False):
 def weights_loss(fname, nevents, label_type, table='Voxels', group='DATASET'):
     if label_type==LabelType.Segmentation:
         return weights_loss_segmentation(fname, nevents, table=table, group=group)
+<<<<<<< HEAD
 >>>>>>> a8d80c4 (Adapt more functions)
+=======
+>>>>>>> a8d80c4e2cbaf242526e25f564233454cce922f7
     elif label_type == LabelType.Classification:
         return weights_loss_classification(fname, nevents, effective_number=effective_number)
 
