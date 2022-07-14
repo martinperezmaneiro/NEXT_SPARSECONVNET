@@ -127,6 +127,7 @@ def train_net(*,
               nevents_train = None,
               nevents_valid = None,
               augmentation  = False,
+              nclasses = 3,
               use_cuda = True):
     """
         Trains the net nepoch times and saves the model anytime the validation loss decreases
@@ -152,8 +153,8 @@ def train_net(*,
     start_loss = np.inf
     writer = SummaryWriter(tensorboard_dir)
     for i in range(nepoch):
-        train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, use_cuda = use_cuda)
-        valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, use_cuda = use_cuda)
+        train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclasses, use_cuda = use_cuda)
+        valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, nclass = nclasses, use_cuda = use_cuda)
 
         if valid_loss < start_loss:
             save_checkpoint({'state_dict': net.state_dict(),

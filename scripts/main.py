@@ -148,7 +148,9 @@ if __name__ == '__main__':
                   num_workers = parameters.num_workers,
                   nevents_train = parameters.nevents_train,
                   nevents_valid = parameters.nevents_valid,
-                  augmentation  = parameters.augmentation)
+                  augmentation  = parameters.augmentation,
+                  nclasses = parameters.nclasses, 
+                  use_cuda = True)
 
     if action == 'predict':
         gen = predict_gen(data_path = parameters.predict_file,
