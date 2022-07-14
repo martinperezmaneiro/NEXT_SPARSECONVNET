@@ -25,7 +25,7 @@ def IoU(true, pred, nclass = 3):
 def accuracy(true, pred, **kwrgs):
     return sum(true==pred)/len(true)
 
-def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, nclass = 3):
+def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, nclass = 3, use_cuda = True):
     """
         Trains the net for all the train data one time
     """
@@ -39,7 +39,8 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
         met_epoch = 0
     for batchid, (coord, ener, label, event) in enumerate(loader):
         batch_size = len(event)
-        ener, label = ener.cuda(), label.cuda()
+        if use_cuda:
+            ener, label = ener.cuda(), label.cuda()
 
         optimizer.zero_grad()
 
@@ -65,7 +66,7 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
     return loss_epoch, met_epoch
 
 
-def valid_one_epoch(net, criterion, loader, label_type, nclass = 3):
+def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, use_cuda = True):
     """
         Computes loss and metrics (IoU for segmentation and accuracy for classification)
         for all the validation data
@@ -82,7 +83,8 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3):
     with torch.autograd.no_grad():
         for batchid, (coord, ener, label, event) in enumerate(loader):
             batch_size = len(event)
-            ener, label = ener.cuda(), label.cuda()
+            if use_cuda:
+                ener, label = ener.cuda(), label.cuda()
 
             output = net.forward((coord, ener, batch_size))
 
@@ -172,7 +174,7 @@ def train_net(*,
 
 
 
-def predict_gen(data_path, net, label_type, batch_size, nevents):
+def predict_gen(data_path, net, label_type, batch_size, nevents, use_cuda = True):
     """
     A generator that yields a dictionary with output of collate plus
     output of  network.
@@ -210,7 +212,8 @@ def predict_gen(data_path, net, label_type, batch_size, nevents):
     with torch.autograd.no_grad():
         for batchid, (coord, ener, label, event) in enumerate(loader):
             batch_size = len(event)
-            ener, label = ener.cuda(), label.cuda()
+            if use_cuda:
+                ener, label = ener.cuda(), label.cuda()
             output = net.forward((coord, ener, batch_size))
             y_pred = softmax(output).cpu().detach().numpy()
 
