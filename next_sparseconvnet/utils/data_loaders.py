@@ -92,15 +92,7 @@ def collatefn(batch):
     return  coords, energs, labels, events
 
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999):
-=======
-def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET'):
->>>>>>> 7981e05 (Adapted all loader functions for different table names)
-=======
-def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET'):
->>>>>>> a8d80c4e2cbaf242526e25f564233454cce922f7
+def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET', effective_number = False, beta = 0.9999):
     with tb.open_file(fname, 'r') as h5in:
         dataset_id = h5in.root[group][table].read_where('dataset_id<nevents', field='dataset_id')
         segclass   = h5in.root[group][table].read_where('dataset_id<nevents', field='segclass')
@@ -125,13 +117,13 @@ def weights_loss_segmentation(fname, nevents, table='Voxels', group='DATASET'):
         weights = weights / np.sum(weights) * nclass
         return weights
 
+
 def weights_loss_classification(fname, nevents, effective_number=False, beta=0.9999):
     with tb.open_file(fname, 'r') as h5in:
         binclass   = h5in.root.DATASET.EventsInfo.cols.binclass[:]
 
     nsignal = binclass.sum()
     nbackground = len(binclass)-nsignal
-<<<<<<< HEAD
     freq = np.array([nbackground, nsignal])
     if not effective_number:
         return freq/sum(freq)
@@ -141,20 +133,9 @@ def weights_loss_classification(fname, nevents, effective_number=False, beta=0.9
         weights = weights / np.sum(weights) * 2
         return weights
 
-def weights_loss(fname, nevents, label_type, effective_number=False):
+def weights_loss(fname, nevents, label_type, table='Voxels', group='DATASET', effective_number = False):
     if label_type==LabelType.Segmentation:
-        return weights_loss_segmentation(fname, nevents, effective_number=effective_number)
-=======
-    inverse_freq = [nbackground, nsignal]
-    return inverse_freq/sum(inverse_freq)
-
-def weights_loss(fname, nevents, label_type, table='Voxels', group='DATASET'):
-    if label_type==LabelType.Segmentation:
-        return weights_loss_segmentation(fname, nevents, table=table, group=group)
-<<<<<<< HEAD
->>>>>>> a8d80c4 (Adapt more functions)
-=======
->>>>>>> a8d80c4e2cbaf242526e25f564233454cce922f7
+        return weights_loss_segmentation(fname, nevents, table=table, group=group, effective_number = effective_number)
     elif label_type == LabelType.Classification:
         return weights_loss_classification(fname, nevents, effective_number=effective_number)
 
