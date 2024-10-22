@@ -127,12 +127,13 @@ def train_net(*,
               nevents_train = None,
               nevents_valid = None,
               augmentation  = False,
+              seglabel_name = 'segclass',
               use_cuda = True):
     """
         Trains the net nepoch times and saves the model anytime the validation loss decreases
     """
-    train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation)
-    valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid)
+    train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name)
+    valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name)
 
     loader_train = torch.utils.data.DataLoader(train_gen,
                                                batch_size = train_batch_size,
@@ -175,7 +176,7 @@ def train_net(*,
 
 
 
-def predict_gen(data_path, net, label_type, batch_size, nevents, use_cuda = True):
+def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', use_cuda = True):
     """
     A generator that yields a dictionary with output of collate plus
     output of  network.
@@ -199,7 +200,7 @@ def predict_gen(data_path, net, label_type, batch_size, nevents, use_cuda = True
             predictions : np.array (2d) containing predictions for all the classes
     """
 
-    gen    = DataGen(data_path, label_type, nevents = nevents)
+    gen    = DataGen(data_path, label_type, nevents = nevents, seglabel_name = seglabel_name)
     loader = torch.utils.data.DataLoader(gen,
                                          batch_size = batch_size,
                                          shuffle = False,

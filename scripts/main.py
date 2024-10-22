@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
         if parameters.weight_loss is True: #calculate mean using first 10000 events from file
             print('Calculating weights')
-            weights = torch.Tensor(weights_loss(parameters.train_file, 10000, parameters.labeltype, effective_number=False)).cuda()
+            weights = torch.Tensor(weights_loss(parameters.train_file, 10000, parameters.labeltype, effective_number=False, seglabel_name=parameters.seglabel_name)).cuda()
             print('Weights are', weights)
         elif isinstance(parameters.weight_loss, list):
             weights = torch.Tensor(parameters.weight_loss).cuda()
@@ -148,14 +148,16 @@ if __name__ == '__main__':
                   num_workers = parameters.num_workers,
                   nevents_train = parameters.nevents_train,
                   nevents_valid = parameters.nevents_valid,
-                  augmentation  = parameters.augmentation)
+                  augmentation  = parameters.augmentation, 
+                  seglabel_name = parameters.seglabel_name)
 
     if action == 'predict':
         gen = predict_gen(data_path = parameters.predict_file,
                           label_type = parameters.labeltype,
                           net = net,
                           batch_size = parameters.predict_batch,
-                          nevents = parameters.nevents_predict)
+                          nevents = parameters.nevents_predict, 
+                          seglabel_name = parameters.seglabel_name)
         coorname = ['xbin', 'ybin', 'zbin']
         output_name = parameters.out_file
 

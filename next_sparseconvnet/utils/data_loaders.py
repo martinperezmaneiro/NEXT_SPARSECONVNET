@@ -34,7 +34,7 @@ class DataGen_classification(torch.utils.data.Dataset):
 
 
 class DataGen(torch.utils.data.Dataset):
-    def __init__(self, filename, label_type, nevents=None, augmentation = False):
+    def __init__(self, filename, label_type, nevents=None, augmentation = False, seglabel_name = 'segclass'):
         """ This class yields events from pregenerated MC file.
         Parameters:
             filename : str; filename to read
@@ -44,9 +44,10 @@ class DataGen(torch.utils.data.Dataset):
         self.filename   = filename
         if not isinstance(label_type, LabelType):
             raise ValueError(f'{label_type} not recognized!')
-        self.label_type = label_type
-        self.events     = read_events_info(filename, nevents)
-        self.bininfo    = load_dst(filename, 'DATASET', 'BinsInfo')
+        self.label_type    = label_type
+        self.seglabel_name = seglabel_name
+        self.events        = read_events_info(filename, nevents)
+        self.bininfo       = load_dst(filename, 'DATASET', 'BinsInfo')
         self.h5in = None
         self.augmentation = augmentation
         self.maxbins = [self.bininfo['nbins_x'][0], self.bininfo['nbins_y'][0], self.bininfo['nbins_z'][0]]
@@ -61,7 +62,7 @@ class DataGen(torch.utils.data.Dataset):
         if self.label_type == LabelType.Classification:
             label = np.unique(hits['binclass'])
         elif self.label_type == LabelType.Segmentation:
-            label = hits['segclass']
+            label = hits[self.seglabel_name]
         return hits['xbin'], hits['ybin'], hits['zbin'], hits['energy'], label, idx_
 
     def __len__(self):
@@ -90,16 +91,16 @@ def collatefn(batch):
     return  coords, energs, labels, events
 
 
-def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999):
+def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999, seglabel_name = 'segclass'):
     with tb.open_file(fname, 'r') as h5in:
         dataset_id = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field='dataset_id')
-        segclass   = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field='segclass')
+        seglabel   = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field=seglabel_name)
 
-    df = pd.DataFrame({'dataset_id':dataset_id, 'segclass':segclass})
-    nclass = max(df.segclass)+1
-    mean_freq = np.bincount(df.segclass, minlength=nclass)
+    df = pd.DataFrame({'dataset_id':dataset_id, 'seglabel':seglabel})
+    nclass = max(df.seglabel)+1
+    mean_freq = np.bincount(df.seglabel, minlength=nclass)
     # this is applying per event mean
-    # df = df.groupby('dataset_id').segclass.apply(lambda x:np.bincount(x, minlength=nclass)/len(x))
+    # df = df.groupby('dataset_id').seglabel.apply(lambda x:np.bincount(x, minlength=nclass)/len(x))
     # mean_freq = df.mean()
     if not effective_number:
         inverse_freq = 1./mean_freq
@@ -125,9 +126,9 @@ def weights_loss_classification(fname, nevents, effective_number=False, beta=0.9
         weights = weights / np.sum(weights) * 2
         return weights
 
-def weights_loss(fname, nevents, label_type, effective_number=False):
+def weights_loss(fname, nevents, label_type, effective_number=False, seglabel_name = 'segclass'):
     if label_type==LabelType.Segmentation:
-        return weights_loss_segmentation(fname, nevents, effective_number=effective_number)
+        return weights_loss_segmentation(fname, nevents, effective_number=effective_number, seglabel_name=seglabel_name)
     elif label_type == LabelType.Classification:
         return weights_loss_classification(fname, nevents, effective_number=effective_number)
 
