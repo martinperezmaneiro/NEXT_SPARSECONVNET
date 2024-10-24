@@ -16,8 +16,9 @@ import pandas as pd
 import tables as tb
 
 from invisible_cities.io.dst_io import df_writer
-from invisible_cities.cities.components import index_tables
+# from invisible_cities.cities.components import index_tables
 
+from next_sparseconvnet.utils.data_io          import index_tables
 
 from next_sparseconvnet.utils.data_loaders     import LabelType
 from next_sparseconvnet.utils.data_loaders     import weights_loss

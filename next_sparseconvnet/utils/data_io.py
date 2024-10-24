@@ -35,3 +35,15 @@ def get_3d_input(filename, eventid, binsX, binsY, binsZ):
     zdig = np.digitize(zcord,binsZ)
 
     return xdig, ydig, zdig, ener
+
+def index_tables(file_out):
+    """
+    -finds all tables in output_file
+    -checks if any columns in the tables have been marked to be indexed by writers
+    -indexes those columns
+    """
+    with tb.open_file(file_out, 'r+') as h5out:
+        for table in h5out.walk_nodes(classname='Table'):        # Walk over all tables in h5out
+            if 'columns_to_index' not in table.attrs:  continue  # Check for columns to index
+            for colname in table.attrs.columns_to_index:         # Index those columns
+                table.colinstances[colname].create_index()

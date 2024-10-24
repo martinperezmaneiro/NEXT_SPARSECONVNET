@@ -17,7 +17,8 @@ from invisible_cities.io import mcinfo_io as mio
 from invisible_cities.io import dst_io    as dio
 
 from invisible_cities.core  .configure import configure
-from invisible_cities.cities.components import index_tables
+# from invisible_cities.cities.components import index_tables
+from next_sparseconvnet.utils.data_io   import index_tables
 from next_sparseconvnet.data_io_scripts import MC_dataset_table_utils as mcutils
 
 
