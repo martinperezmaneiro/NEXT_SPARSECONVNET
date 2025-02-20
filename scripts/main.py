@@ -150,7 +150,8 @@ if __name__ == '__main__':
                   nevents_train = parameters.nevents_train,
                   nevents_valid = parameters.nevents_valid,
                   augmentation  = parameters.augmentation, 
-                  seglabel_name = parameters.seglabel_name)
+                  seglabel_name = parameters.seglabel_name, 
+                  nclass = parameters.nclasses)
 
     if action == 'predict':
         gen = predict_gen(data_path = parameters.predict_file,

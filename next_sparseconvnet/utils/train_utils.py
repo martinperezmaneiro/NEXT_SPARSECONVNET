@@ -105,7 +105,7 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, use_cuda = T
         met_epoch = met_epoch / len(loader)
         loss_ = f" Validation Loss: {loss_epoch:.6f}"
         time_ = f"\t Time: {(time() - t) / 60:.2f} mins"
-        print(loss_)
+        print(loss_ + time_)
 
     return loss_epoch, met_epoch
 
@@ -133,6 +133,7 @@ def train_net(*,
               nevents_valid = None,
               augmentation  = False,
               seglabel_name = 'segclass',
+              nclass = 3,
               use_cuda = True):
     """
         Trains the net nepoch times and saves the model anytime the validation loss decreases
@@ -161,8 +162,8 @@ def train_net(*,
     start_loss = np.inf
     writer = SummaryWriter(tensorboard_dir)
     for i in range(nepoch):
-        train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, use_cuda = use_cuda)
-        valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, use_cuda = use_cuda)
+        train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, use_cuda = use_cuda)
+        valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, nclass = nclass, use_cuda = use_cuda)
 
         if valid_loss < start_loss:
             save_checkpoint({'state_dict': net.state_dict(),
