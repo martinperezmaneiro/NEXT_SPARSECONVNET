@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import sys
+from time import time
 import sparseconvnet as scn
 from .data_loaders import DataGen, collatefn, LabelType
 from next_sparseconvnet.networks.architectures import UNet
@@ -29,6 +30,7 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
     """
         Trains the net for all the train data one time
     """
+    t = time()
     net.train()
     loss_epoch = 0
     if label_type== LabelType.Segmentation:
@@ -59,9 +61,10 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
 
     loss_epoch = loss_epoch / len(loader)
     met_epoch = met_epoch / len(loader)
-    epoch_ = f"Train Epoch: {epoch_id}"
-    loss_ = f"\t Loss: {loss_epoch:.6f}"
-    print(epoch_ + loss_)
+    epoch_ = f"Epoch: {epoch_id}"
+    loss_ = f"\n Training   Loss: {loss_epoch:.6f}"
+    time_ = f"\t Time: {(time() - t) / 60:.2f} mins"
+    print(epoch_ + loss_ + time_)
 
     return loss_epoch, met_epoch
 
@@ -71,6 +74,7 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, use_cuda = T
         Computes loss and metrics (IoU for segmentation and accuracy for classification)
         for all the validation data
     """
+    t = time()
     net.eval()
     loss_epoch = 0
     if label_type== LabelType.Segmentation:
@@ -99,7 +103,8 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, use_cuda = T
 
         loss_epoch = loss_epoch / len(loader)
         met_epoch = met_epoch / len(loader)
-        loss_ = f"\t Validation Loss: {loss_epoch:.6f}"
+        loss_ = f" Validation Loss: {loss_epoch:.6f}"
+        time_ = f"\t Time: {(time() - t) / 60:.2f} mins"
         print(loss_)
 
     return loss_epoch, met_epoch
@@ -132,6 +137,7 @@ def train_net(*,
     """
         Trains the net nepoch times and saves the model anytime the validation loss decreases
     """
+    t = time()
     train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name)
     valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name)
 
@@ -150,6 +156,8 @@ def train_net(*,
                                                drop_last = True,
                                                pin_memory = False)
 
+    print('Data loaded ({:.2f} min)'.format((time() - t) / 60))
+    
     start_loss = np.inf
     writer = SummaryWriter(tensorboard_dir)
     for i in range(nepoch):
