@@ -57,6 +57,9 @@ def get_params(confname):
 
 
 if __name__ == '__main__':
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print('Device: {}'.format(device))
+
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
     parser = ArgumentParser(description="parameters for models")
@@ -80,7 +83,6 @@ if __name__ == '__main__':
                    parameters.basic_num,
                    nclasses = parameters.nclasses,
                    momentum = parameters.momentum)
-        net = net.cuda()
     elif parameters.netarch == NetArchitecture.ResNet:
         net = ResNet(parameters.spatial_size,
                      parameters.init_conv_nplanes,
@@ -90,7 +92,7 @@ if __name__ == '__main__':
                      parameters.basic_num,
                      momentum = parameters.momentum,
                      nlinear = parameters.nlinear)
-        net = net.cuda()
+    net = net.to(device)
 
     print('net constructed')
 
@@ -116,10 +118,10 @@ if __name__ == '__main__':
 
         if parameters.weight_loss is True: #calculate mean using first 10000 events from file
             print('Calculating weights')
-            weights = torch.Tensor(weights_loss(parameters.train_file, 10000, parameters.labeltype, effective_number=False, seglabel_name=parameters.seglabel_name)).cuda()
+            weights = torch.Tensor(weights_loss(parameters.train_file, 10000, parameters.labeltype, effective_number=False, seglabel_name=parameters.seglabel_name)).to(device)
             print('Weights are', weights)
         elif isinstance(parameters.weight_loss, list):
-            weights = torch.Tensor(parameters.weight_loss).cuda()
+            weights = torch.Tensor(parameters.weight_loss).to(device)
             print('Read weights from config')
         else:
             weights = None
@@ -151,7 +153,8 @@ if __name__ == '__main__':
                   nevents_valid = parameters.nevents_valid,
                   augmentation  = parameters.augmentation, 
                   seglabel_name = parameters.seglabel_name, 
-                  nclass = parameters.nclasses)
+                  nclass = parameters.nclasses,
+                  device = device)
 
     if action == 'predict':
         gen = predict_gen(data_path = parameters.predict_file,
@@ -159,7 +162,8 @@ if __name__ == '__main__':
                           net = net,
                           batch_size = parameters.predict_batch,
                           nevents = parameters.nevents_predict, 
-                          seglabel_name = parameters.seglabel_name)
+                          seglabel_name = parameters.seglabel_name, 
+                          device = device)
         coorname = ['xbin', 'ybin', 'zbin']
         output_name = parameters.out_file
 

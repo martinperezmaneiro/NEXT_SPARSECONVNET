@@ -26,7 +26,7 @@ def IoU(true, pred, nclass = 3):
 def accuracy(true, pred, **kwrgs):
     return sum(true==pred)/len(true)
 
-def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, nclass = 3, use_cuda = True):
+def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, nclass = 3, device = 'cuda'):
     """
         Trains the net for all the train data one time
     """
@@ -41,8 +41,7 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
         met_epoch = 0
     for batchid, (coord, ener, label, event) in enumerate(loader):
         batch_size = len(event)
-        if use_cuda:
-            ener, label = ener.cuda(), label.cuda()
+        ener, label = ener.to(device), label.to(device)
 
         optimizer.zero_grad()
 
@@ -69,7 +68,7 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
     return loss_epoch, met_epoch
 
 
-def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, use_cuda = True):
+def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, device = 'cuda'):
     """
         Computes loss and metrics (IoU for segmentation and accuracy for classification)
         for all the validation data
@@ -87,8 +86,7 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, use_cuda = T
     with torch.autograd.no_grad():
         for batchid, (coord, ener, label, event) in enumerate(loader):
             batch_size = len(event)
-            if use_cuda:
-                ener, label = ener.cuda(), label.cuda()
+            ener, label = ener.to(device), label.to(device)
 
             output = net.forward((coord, ener, batch_size))
 
@@ -134,7 +132,7 @@ def train_net(*,
               augmentation  = False,
               seglabel_name = 'segclass',
               nclass = 3,
-              use_cuda = True):
+              device = 'cuda'):
     """
         Trains the net nepoch times and saves the model anytime the validation loss decreases
     """
@@ -142,28 +140,31 @@ def train_net(*,
     train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name)
     valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name)
 
+    if device == 'cuda': pin_mem = True
+    else: pin_mem = False
+
     loader_train = torch.utils.data.DataLoader(train_gen,
                                                batch_size = train_batch_size,
                                                shuffle = True,
                                                num_workers = num_workers,
                                                collate_fn = collatefn,
                                                drop_last = True,
-                                               pin_memory = False)
+                                               pin_memory = pin_mem)
     loader_valid = torch.utils.data.DataLoader(valid_gen,
                                                batch_size = valid_batch_size,
                                                shuffle = True,
                                                num_workers = 1,
                                                collate_fn = collatefn,
                                                drop_last = True,
-                                               pin_memory = False)
+                                               pin_memory = pin_mem)
 
     print('Data loaded ({:.2f} min)'.format((time() - t) / 60))
     
     start_loss = np.inf
     writer = SummaryWriter(tensorboard_dir)
     for i in range(nepoch):
-        train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, use_cuda = use_cuda)
-        valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, nclass = nclass, use_cuda = use_cuda)
+        train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, device = device)
+        valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, nclass = nclass, device = device)
 
         if valid_loss < start_loss:
             save_checkpoint({'state_dict': net.state_dict(),
@@ -185,7 +186,7 @@ def train_net(*,
 
 
 
-def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', use_cuda = True):
+def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', device = 'cuda'):
     """
     A generator that yields a dictionary with output of collate plus
     output of  network.
@@ -223,8 +224,7 @@ def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name =
     with torch.autograd.no_grad():
         for batchid, (coord, ener, label, event) in enumerate(loader):
             batch_size = len(event)
-            if use_cuda:
-                ener, label = ener.cuda(), label.cuda()
+            ener, label = ener.to(device), label.to(device)
             output = net.forward((coord, ener, batch_size))
             y_pred = softmax(output).cpu().detach().numpy()
 
