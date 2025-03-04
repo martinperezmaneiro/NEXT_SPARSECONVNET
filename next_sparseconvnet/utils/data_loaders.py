@@ -52,17 +52,25 @@ class DataGen(torch.utils.data.Dataset):
         self.augmentation = augmentation
         self.maxbins = [self.bininfo['nbins_x'][0], self.bininfo['nbins_y'][0], self.bininfo['nbins_z'][0]]
 
-    def __getitem__(self, idx):
-        idx_ = self.events.iloc[idx].dataset_id
-        if self.h5in is None:#this opens a table once getitem gets called
+    def initialize_file(self): #this opens the table once we call the initialization
+        if self.h5in is None:
             self.h5in = tb.open_file(self.filename, 'r')
+
+    def __getitem__(self, idx):
+        self.initialize_file() # Make sure it's open
+
+        idx_ = self.events.iloc[idx].dataset_id
         hits  = self.h5in.root.DATASET.Voxels.read_where('dataset_id==idx_')
+
         if self.augmentation:
             transform_input(hits, self.maxbins)
+
         if self.label_type == LabelType.Classification:
             label = np.unique(hits['binclass'])
+
         elif self.label_type == LabelType.Segmentation:
             label = hits[self.seglabel_name]
+
         return hits['xbin'], hits['ybin'], hits['zbin'], hits['energy'], label, idx_
 
     def __len__(self):
@@ -90,6 +98,11 @@ def collatefn(batch):
 
     return  coords, energs, labels, events
 
+def worker_init_fn(worker_id): # Required by PyTorch
+    print(f"Initializing worker {worker_id}")
+    worker_info = torch.utils.data.get_worker_info()
+    dataset = worker_info.dataset  # This is your DataGen instance
+    dataset.initialize_file()      # Pre-open file in the worker
 
 def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999, seglabel_name = 'segclass'):
     with tb.open_file(fname, 'r') as h5in:

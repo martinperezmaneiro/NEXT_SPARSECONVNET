@@ -3,7 +3,7 @@ import torch
 import sys
 from time import time
 import sparseconvnet as scn
-from .data_loaders import DataGen, collatefn, LabelType
+from .data_loaders import DataGen, collatefn, LabelType, worker_init_fn
 from next_sparseconvnet.networks.architectures import UNet
 from torch.utils.tensorboard import SummaryWriter
 
@@ -149,14 +149,17 @@ def train_net(*,
                                                num_workers = num_workers,
                                                collate_fn = collatefn,
                                                drop_last = True,
-                                               pin_memory = pin_mem)
+                                               pin_memory = pin_mem, 
+                                               persistent_workers = True,
+                                               worker_init_fn = worker_init_fn)
     loader_valid = torch.utils.data.DataLoader(valid_gen,
                                                batch_size = valid_batch_size,
                                                shuffle = True,
                                                num_workers = 1,
                                                collate_fn = collatefn,
                                                drop_last = True,
-                                               pin_memory = pin_mem)
+                                               pin_memory = pin_mem, 
+                                               persistent_workers = True)
 
     print('Data loaded ({:.2f} min)'.format((time() - t) / 60))
     
