@@ -6,6 +6,7 @@ import sparseconvnet as scn
 from .data_loaders import DataGen, collatefn, LabelType, worker_init_fn
 from next_sparseconvnet.networks.architectures import UNet
 from torch.utils.tensorboard import SummaryWriter
+import torch.multiprocessing as mp
 
 def IoU(true, pred, nclass = 3):
     """
@@ -136,6 +137,7 @@ def train_net(*,
     """
         Trains the net nepoch times and saves the model anytime the validation loss decreases
     """
+    mp.set_start_method('spawn', force=True)
     t = time()
     train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name)
     valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name)
