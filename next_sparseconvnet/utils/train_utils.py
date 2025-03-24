@@ -235,9 +235,9 @@ def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name =
 
             if label_type == LabelType.Classification:
                 out_dict = dict(
-                    label = label.cpu().detach().numpy(),
-                    dataset_id = event,
-                    prediction = y_pred)
+                    label       = label.cpu().detach().numpy(),
+                    dataset_id  = event,
+                    predictions = y_pred)
 
             elif label_type == LabelType.Segmentation:
                 # event is a vector of batch_size
