@@ -191,7 +191,7 @@ def train_net(*,
 
 
 
-def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', device = 'cuda'):
+def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', device = 'cuda', num_workers = 1):
     """
     A generator that yields a dictionary with output of collate plus
     output of  network.
@@ -219,7 +219,7 @@ def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name =
     loader = torch.utils.data.DataLoader(gen,
                                          batch_size = batch_size,
                                          shuffle = False,
-                                         num_workers = 1,
+                                         num_workers = num_workers,
                                          collate_fn = collatefn,
                                          drop_last = False,
                                          pin_memory = False)

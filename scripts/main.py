@@ -163,7 +163,8 @@ if __name__ == '__main__':
                           batch_size = parameters.predict_batch,
                           nevents = parameters.nevents_predict, 
                           seglabel_name = parameters.seglabel_name, 
-                          device = device)
+                          device = device, 
+                          num_workers = parameters.num_workers)
         coorname = ['xbin', 'ybin', 'zbin']
         output_name = parameters.out_file
 
