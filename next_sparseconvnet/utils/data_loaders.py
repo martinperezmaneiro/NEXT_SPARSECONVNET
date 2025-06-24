@@ -105,9 +105,12 @@ def worker_init_fn(worker_id): # Required by PyTorch
     dataset.initialize_file()      # Pre-open file in the worker
 
 def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999, seglabel_name = 'segclass'):
+    if isinstance(nevents, (list, tuple)):
+        nevents = nevents[1] - nevents[0]
+
     with tb.open_file(fname, 'r') as h5in:
-        dataset_id = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field='dataset_id')
-        seglabel   = h5in.root.DATASET.Voxels.read_where('dataset_id<nevents', field=seglabel_name)
+        dataset_id = h5in.root.DATASET.Voxels.read_where(f'dataset_id<{nevents}', field='dataset_id')
+        seglabel   = h5in.root.DATASET.Voxels.read_where(f'dataset_id<{nevents}', field=seglabel_name)
 
     df = pd.DataFrame({'dataset_id':dataset_id, 'seglabel':seglabel})
     nclass = max(df.seglabel)+1
@@ -124,7 +127,7 @@ def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.999
         weights = weights / np.sum(weights) * nclass
         return weights
 
-def weights_loss_classification(fname, nevents, effective_number=False, beta=0.9999):
+def weights_loss_classification(fname, effective_number=False, beta=0.9999):
     with tb.open_file(fname, 'r') as h5in:
         binclass   = h5in.root.DATASET.EventsInfo.cols.binclass[:]
 
@@ -143,7 +146,7 @@ def weights_loss(fname, nevents, label_type, effective_number=False, seglabel_na
     if label_type==LabelType.Segmentation:
         return weights_loss_segmentation(fname, nevents, effective_number=effective_number, seglabel_name=seglabel_name)
     elif label_type == LabelType.Classification:
-        return weights_loss_classification(fname, nevents, effective_number=effective_number)
+        return weights_loss_classification(fname, effective_number=effective_number)
 
 def transform_input(hits, bin_max, inplace=True):
     bin_names = ['xbin', 'ybin', 'zbin']
@@ -182,22 +185,66 @@ def read_event(fname, datid, table='Voxels', group='DATASET', df=True):
             return pd.DataFrame.from_records(hits)
         return hits
 
-def read_events_info(filename, nevents):
-    events = load_dst(filename, 'DATASET', 'EventsInfo')
-    if nevents is not None:
-        if nevents>=len(events):
-            warnings.warn(UserWarning(f'length of dataset smaller than {nevents}, using full dataset'))
-        else:
-            events = events.iloc[:nevents]
+# def read_events_info(filename, nevents):
+#     events = load_dst(filename, 'DATASET', 'EventsInfo')
+#     if nevents is not None:
+#         if nevents>=len(events):
+#             warnings.warn(UserWarning(f'length of dataset smaller than {nevents}, using full dataset'))
+#         else:
+#             events = events.iloc[:nevents]
 
-    events[events.binclass==2]=1
+#     events[events.binclass==2]=1 #WTF
+#     return events
+
+def read_events_info(filename, nevents=None):
+    events = load_dst(filename, 'DATASET', 'EventsInfo')
+
+    if nevents is not None:
+        if isinstance(nevents, int):
+            if nevents >= len(events):
+                warnings.warn(UserWarning(f'Length of dataset smaller than {nevents}, using full dataset'))
+            else:
+                events = events.iloc[:nevents]
+
+        elif isinstance(nevents, (tuple, list)) and len(nevents) == 2:
+            start, end = nevents
+            if start >= len(events):
+                warnings.warn(UserWarning(f'Start index {start} beyond dataset length; returning empty DataFrame'))
+                events = events.iloc[0:0]
+            else:
+                events = events.iloc[start:end]
+
+        else:
+            raise ValueError("`nevents` must be None, an integer, or a (start, end) tuple/list.")
+
+    events.loc[events.binclass == 2, 'binclass'] = 1 #wtf
+
     return events
 
-def read_events(fname, nevents, table='Voxels', group='DATASET', df=True):
-    with tb.open_file(fname) as h5in:
-        if nevents is not None:
-            hits = h5in.root[group][table].read_where('dataset_id<nevents')
-        else:
-            hits = h5in.root[group][table].read()
+# def read_events(fname, nevents, table='Voxels', group='DATASET', df=True):
+#     with tb.open_file(fname) as h5in:
+#         if nevents is not None:
+#             hits = h5in.root[group][table].read_where('dataset_id<nevents')
+#         else:
+#             hits = h5in.root[group][table].read()
 
-        return pd.DataFrame.from_records(hits)
+#         return pd.DataFrame.from_records(hits)
+
+def read_events(fname, nevents=None, table='Voxels', group='DATASET', df=True):
+    with tb.open_file(fname) as h5in:
+        table_data = h5in.root[group][table]
+
+        if nevents is None:
+            hits = table_data.read()
+
+        elif isinstance(nevents, int):
+            hits = table_data.read_where(f'dataset_id < {nevents}')
+
+        elif isinstance(nevents, (tuple, list)) and len(nevents) == 2:
+            start, end = nevents
+            hits = table_data.read_where(f'({start} <= dataset_id) & (dataset_id < {end})')
+
+        else:
+            raise ValueError("nevents must be None, an integer, or a (start, end) tuple/list")
+
+        return pd.DataFrame.from_records(hits) if df else hits
