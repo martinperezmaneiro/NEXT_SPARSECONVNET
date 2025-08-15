@@ -11,6 +11,7 @@ from invisible_cities.types.ic_types import AutoNameEnumBase
 
 from . data_io import get_3d_input
 
+import sys
 
 class LabelType(AutoNameEnumBase):
     Classification = auto()
@@ -108,6 +109,7 @@ def collatefn(batch):
 
 def worker_init_fn(worker_id): # Required by PyTorch
     print(f"Initializing worker {worker_id}")
+    sys.stdout.flush()
     worker_info = torch.utils.data.get_worker_info()
     dataset = worker_info.dataset  # This is your DataGen instance
     dataset.initialize_file()      # Pre-open file in the worker

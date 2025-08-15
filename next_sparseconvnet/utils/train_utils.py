@@ -8,24 +8,49 @@ from next_sparseconvnet.networks.architectures import UNet
 from torch.utils.tensorboard import SummaryWriter
 import torch.multiprocessing as mp
 
-def IoU(true, pred, nclass = 3):
+def IoU(true, pred, nclass=3):
     """
-        Intersection over union is a metric for semantic segmentation.
-        It returns a IoU value for each class of our input tensors/arrays.
+    Intersection over union (IoU) metric for semantic segmentation.
+    It returns a IoU value for each class of our input tensors/arrays. 
+    This is a vectorized and much faster implementation.
     """
-    eps = sys.float_info.epsilon
-    confusion_matrix = np.zeros((nclass, nclass))
+    eps = np.finfo(float).eps
+    
+    # Flatten the arrays to ensure they are 1D
+    true = true.flatten()
+    pred = pred.flatten()
 
-    for i in range(len(true)):
-        confusion_matrix[true[i]][pred[i]] += 1
+    # Calculate the confusion matrix using NumPy's bincount
+    # This is significantly faster than a Python loop
+    n_pixels = len(true)
+    y_true_f = nclass * true.astype(int) + pred.astype(int)
+    confusion_matrix = np.bincount(y_true_f, minlength=nclass**2).reshape(nclass, nclass)
 
-    IoU = []
-    for i in range(nclass):
-        IoU.append((confusion_matrix[i, i] + eps) / (sum(confusion_matrix[:, i]) + sum(confusion_matrix[i, :]) - confusion_matrix[i, i] + eps))
-    return np.array(IoU)
+    # Calculate IoU for each class from the confusion matrix
+    union_per_class = np.sum(confusion_matrix, axis=0) + np.sum(confusion_matrix, axis=1) - np.diag(confusion_matrix)
+    IoU_per_class = (np.diag(confusion_matrix) + eps) / (union_per_class + eps)
+    
+    return IoU_per_class
+
+#def IoU(true, pred, nclass = 3):
+#    """
+#        Intersection over union is a metric for semantic segmentation.
+#        It returns a IoU value for each class of our input tensors/arrays.
+#    """
+#    eps = sys.float_info.epsilon
+#    confusion_matrix = np.zeros((nclass, nclass))
+#
+#    for i in range(len(true)):
+#        confusion_matrix[true[i]][pred[i]] += 1
+#
+#    IoU = []
+#    for i in range(nclass):
+#        IoU.append((confusion_matrix[i, i] + eps) / (sum(confusion_matrix[:, i]) + sum(confusion_matrix[i, :]) - confusion_matrix[i, i] + eps))
+#    return np.array(IoU)
 
 def accuracy(true, pred, **kwrgs):
-    return sum(true==pred)/len(true)
+    return np.mean(true == pred)
+    #return sum(true==pred)/len(true)
 
 def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, nclass = 3, device = 'cuda'):
     """
@@ -40,24 +65,53 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
     elif label_type == LabelType.Classification:
         metrics = accuracy
         met_epoch = 0
+    t_batch = time()
     for batchid, (coord, ener, label, event) in enumerate(loader):
+        print('Batch: ', batchid)
+        print((time() - t_batch) / 60, ' mins - load batch')
+        sys.stdout.flush()
         batch_size = len(event)
+        t_ = time()
         ener, label = ener.to(device), label.to(device)
+
+        print((time() - t_) / 60, ' mins - tensors to cuda')
+        sys.stdout.flush()
 
         optimizer.zero_grad()
 
+        t_ = time()
+
         output = net.forward((coord, ener, batch_size))
 
-        loss = criterion(output, label)
-        loss.backward()
+        print((time() - t_) / 60, ' mins - net forward')
+        sys.stdout.flush()
 
+        t_ = time()
+
+        loss = criterion(output, label)
+
+        print((time() - t_) / 60, ' mins - loss computation')
+        sys.stdout.flush()
+
+        t_ = time()
+        loss.backward()
+        print((time() - t_) / 60, ' mins - backward step')
+        sys.stdout.flush()
+
+        t_ = time()
         optimizer.step()
+        print((time() - t_) / 60, ' mins - optimizer update')
+        sys.stdout.flush()
 
         loss_epoch += loss.item()
 
+        t_ = time()
         softmax = torch.nn.Softmax(dim = 1)
         prediction = torch.argmax(softmax(output), 1)
-        met_epoch += metrics(label.cpu(), prediction.cpu(), nclass=nclass)
+        met_epoch += metrics(label.cpu().numpy(), prediction.cpu().numpy(), nclass=nclass)
+        print((time() - t_) / 60, ' mins - metrics computation')
+        sys.stdout.flush()
+        t_batch = time()
 
     loss_epoch = loss_epoch / len(loader)
     met_epoch = met_epoch / len(loader)
@@ -65,6 +119,7 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
     loss_ = f"\n Training   Loss: {loss_epoch:.6f}"
     time_ = f"\t Time: {(time() - t) / 60:.2f} mins"
     print(epoch_ + loss_ + time_)
+    sys.stdout.flush()
 
     return loss_epoch, met_epoch
 
@@ -98,13 +153,14 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, device = 'cu
             #IoU
             softmax = torch.nn.Softmax(dim = 1)
             prediction = torch.argmax(softmax(output), 1)
-            met_epoch += metrics(label.cpu(), prediction.cpu(), nclass=nclass)
+            met_epoch += metrics(label.cpu().numpy(), prediction.cpu().numpy(), nclass=nclass)
 
         loss_epoch = loss_epoch / len(loader)
         met_epoch = met_epoch / len(loader)
         loss_ = f" Validation Loss: {loss_epoch:.6f}"
         time_ = f"\t Time: {(time() - t) / 60:.2f} mins"
         print(loss_ + time_)
+        sys.stdout.flush()
 
     return loss_epoch, met_epoch
 
