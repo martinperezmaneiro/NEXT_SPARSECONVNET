@@ -51,16 +51,24 @@ class DataGen(torch.utils.data.Dataset):
         self.h5in = None
         self.augmentation = augmentation
         self.maxbins = [self.bininfo['nbins_x'][0], self.bininfo['nbins_y'][0], self.bininfo['nbins_z'][0]]
+        self.eventidx = 'stridx' in self.events.columns and 'endidx' in self.events.columns
 
     def initialize_file(self): #this opens the table once we call the initialization
         if self.h5in is None:
             self.h5in = tb.open_file(self.filename, 'r')
 
     def __getitem__(self, idx):
-        self.initialize_file() # Make sure it's open
+        # self.initialize_file() # Make sure it's open
 
-        idx_ = self.events.iloc[idx].dataset_id
-        hits  = self.h5in.root.DATASET.Voxels.read_where('dataset_id==idx_')
+        event_info = self.events.iloc[idx]
+        idx_       = event_info['dataset_id']
+
+        if self.eventidx:
+            start_row = event_info['stridx']
+            end_row   = event_info['endidx']
+            hits      = self.h5in.root.DATASET.Voxels[start_row:end_row]
+        else:
+            hits = self.h5in.root.DATASET.Voxels.read_where(f'dataset_id=={idx_}')
 
         if self.augmentation:
             transform_input(hits, self.maxbins)

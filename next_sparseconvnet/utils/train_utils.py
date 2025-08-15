@@ -161,7 +161,8 @@ def train_net(*,
                                                collate_fn = collatefn,
                                                drop_last = True,
                                                pin_memory = pin_mem, 
-                                               persistent_workers = True)
+                                               persistent_workers = True,
+                                               worker_init_fn = worker_init_fn)
 
     print('Data loaded ({:.2f} min)'.format((time() - t) / 60))
     
@@ -222,7 +223,8 @@ def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name =
                                          num_workers = num_workers,
                                          collate_fn = collatefn,
                                          drop_last = False,
-                                         pin_memory = False)
+                                         pin_memory = False,
+                                         worker_init_fn = worker_init_fn)
 
     net.eval()
     softmax = torch.nn.Softmax(dim = 1)
