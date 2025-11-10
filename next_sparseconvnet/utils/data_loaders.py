@@ -35,7 +35,7 @@ class DataGen_classification(torch.utils.data.Dataset):
 
 
 class DataGen(torch.utils.data.Dataset):
-    def __init__(self, filename, label_type, nevents=None, augmentation = False, seglabel_name = 'segclass'):
+    def __init__(self, filename, label_type, nevents=None, augmentation = False, seglabel_name = 'segclass', feature_name = 'energy'):
         """ This class yields events from pregenerated MC file.
         Parameters:
             filename : str; filename to read
@@ -47,6 +47,7 @@ class DataGen(torch.utils.data.Dataset):
             raise ValueError(f'{label_type} not recognized!')
         self.label_type    = label_type
         self.seglabel_name = seglabel_name
+        self.feature_name  = feature_name
         self.events        = read_events_info(filename, nevents)
         self.bininfo       = load_dst(filename, 'DATASET', 'BinsInfo')
         self.h5in = None
@@ -80,7 +81,7 @@ class DataGen(torch.utils.data.Dataset):
         elif self.label_type == LabelType.Segmentation:
             label = hits[self.seglabel_name]
 
-        return hits['xbin'], hits['ybin'], hits['zbin'], hits['energy'], label, idx_
+        return hits['xbin'], hits['ybin'], hits['zbin'], hits[self.feature_name], label, idx_
 
     def __len__(self):
         return len(self.events)

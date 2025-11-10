@@ -188,6 +188,7 @@ def train_net(*,
               nevents_valid = None,
               augmentation  = False,
               seglabel_name = 'segclass',
+              feature_name  = 'energy',
               nclass = 3,
               device = 'cuda'):
     """
@@ -195,8 +196,8 @@ def train_net(*,
     """
     mp.set_start_method('spawn', force=True)
     t = time()
-    train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name)
-    valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name)
+    train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name, feature_name = feature_name)
+    valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name, feature_name = feature_name)
 
     if device == 'cuda': pin_mem = True
     else: pin_mem = False
@@ -248,7 +249,7 @@ def train_net(*,
 
 
 
-def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', device = 'cuda', num_workers = 1):
+def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', feature_name = 'energy', device = 'cuda', num_workers = 1):
     """
     A generator that yields a dictionary with output of collate plus
     output of  network.
@@ -272,7 +273,7 @@ def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name =
             predictions : np.array (2d) containing predictions for all the classes
     """
 
-    gen    = DataGen(data_path, label_type, nevents = nevents, seglabel_name = seglabel_name)
+    gen    = DataGen(data_path, label_type, nevents = nevents, seglabel_name = seglabel_name, feature_name = feature_name)
     loader = torch.utils.data.DataLoader(gen,
                                          batch_size = batch_size,
                                          shuffle = False,

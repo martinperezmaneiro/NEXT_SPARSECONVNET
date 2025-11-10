@@ -82,6 +82,7 @@ if __name__ == '__main__':
                    parameters.stride_sizes,
                    parameters.basic_num,
                    nclasses = parameters.nclasses,
+                   start_planes = parameters.start_planes,
                    momentum = parameters.momentum)
     elif parameters.netarch == NetArchitecture.ResNet:
         net = ResNet(parameters.spatial_size,
@@ -90,6 +91,7 @@ if __name__ == '__main__':
                      parameters.kernel_sizes,
                      parameters.stride_sizes,
                      parameters.basic_num,
+                     start_planes = parameters.start_planes,
                      momentum = parameters.momentum,
                      nlinear = parameters.nlinear)
     net = net.to(device)
@@ -153,6 +155,7 @@ if __name__ == '__main__':
                   nevents_valid = parameters.nevents_valid,
                   augmentation  = parameters.augmentation, 
                   seglabel_name = parameters.seglabel_name, 
+                  featrue_name  = parameters.feature_name,
                   nclass = parameters.nclasses,
                   device = device)
 
@@ -163,6 +166,7 @@ if __name__ == '__main__':
                           batch_size = parameters.predict_batch,
                           nevents = parameters.nevents_predict, 
                           seglabel_name = parameters.seglabel_name, 
+                          feature_name  = parameters.feature_name,
                           device = device, 
                           num_workers = parameters.num_workers)
         coorname = ['xbin', 'ybin', 'zbin']
