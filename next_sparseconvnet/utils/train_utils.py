@@ -188,7 +188,7 @@ def train_net(*,
               nevents_valid = None,
               augmentation  = False,
               seglabel_name = 'segclass',
-              feature_name  = 'energy',
+              feature_name  = ['energy'],
               nclass = 3,
               device = 'cuda'):
     """
@@ -249,7 +249,7 @@ def train_net(*,
 
 
 
-def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', feature_name = 'energy', device = 'cuda', num_workers = 1):
+def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name = 'segclass', feature_name = ['energy'], device = 'cuda', num_workers = 1):
     """
     A generator that yields a dictionary with output of collate plus
     output of  network.

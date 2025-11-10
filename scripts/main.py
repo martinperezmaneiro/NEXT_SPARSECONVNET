@@ -82,7 +82,7 @@ if __name__ == '__main__':
                    parameters.stride_sizes,
                    parameters.basic_num,
                    nclasses = parameters.nclasses,
-                   start_planes = parameters.start_planes,
+                   start_planes = parameters.start_planes, # we could use len(parameters.feature_name), as it should be the same
                    momentum = parameters.momentum)
     elif parameters.netarch == NetArchitecture.ResNet:
         net = ResNet(parameters.spatial_size,

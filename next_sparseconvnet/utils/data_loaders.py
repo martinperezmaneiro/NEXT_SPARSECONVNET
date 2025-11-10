@@ -35,7 +35,7 @@ class DataGen_classification(torch.utils.data.Dataset):
 
 
 class DataGen(torch.utils.data.Dataset):
-    def __init__(self, filename, label_type, nevents=None, augmentation = False, seglabel_name = 'segclass', feature_name = 'energy'):
+    def __init__(self, filename, label_type, nevents=None, augmentation = False, seglabel_name = 'segclass', feature_name = ['energy']):
         """ This class yields events from pregenerated MC file.
         Parameters:
             filename : str; filename to read
@@ -81,7 +81,8 @@ class DataGen(torch.utils.data.Dataset):
         elif self.label_type == LabelType.Segmentation:
             label = hits[self.seglabel_name]
 
-        return hits['xbin'], hits['ybin'], hits['zbin'], hits[self.feature_name], label, idx_
+        features = np.vstack([hits[name] for name in self.feature_name]).T
+        return hits['xbin'], hits['ybin'], hits['zbin'], features, label, idx_
 
     def __len__(self):
         return len(self.events)
@@ -103,7 +104,7 @@ def collatefn(batch):
         events[bid] = event
 
     coords = torch.tensor(np.concatenate(coords, axis=0), dtype = torch.long)
-    energs = torch.tensor(np.concatenate(energs, axis=0), dtype = torch.float).unsqueeze(-1)
+    energs = torch.tensor(np.concatenate(energs, axis=0), dtype = torch.float)
     labels = torch.tensor(np.concatenate(labels, axis=0), dtype = torch.long)
 
     return  coords, energs, labels, events
