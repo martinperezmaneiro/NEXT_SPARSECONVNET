@@ -155,7 +155,7 @@ if __name__ == '__main__':
                   nevents_valid = parameters.nevents_valid,
                   augmentation  = parameters.augmentation, 
                   seglabel_name = parameters.seglabel_name, 
-                  featrue_name  = parameters.feature_name,
+                  feature_name  = parameters.feature_name,
                   nclass = parameters.nclasses,
                   device = device)
 
