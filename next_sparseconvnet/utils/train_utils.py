@@ -1,12 +1,24 @@
 import numpy as np
 import torch
 import sys
+import inspect
 from time import time
 import sparseconvnet as scn
 from .data_loaders import DataGen, collatefn, LabelType, worker_init_fn
 from next_sparseconvnet.networks.architectures import UNet
 from torch.utils.tensorboard import SummaryWriter
 import torch.multiprocessing as mp
+import torch.optim.lr_scheduler as lr_scheduler
+
+def get_name_of_scheduler(scheduler):
+    """
+    Get the name of the scheduler.
+    """
+    for name, obj in lr_scheduler.__dict__.items():
+        if inspect.isclass(obj):
+            if isinstance(scheduler, obj):
+                return name
+    return None
 
 def IoU(true, pred, nclass=3):
     """
@@ -180,6 +192,7 @@ def train_net(*,
               net,
               criterion,
               optimizer,
+              scheduler,
               label_type,
               checkpoint_dir,
               tensorboard_dir,
@@ -228,6 +241,11 @@ def train_net(*,
     for i in range(nepoch):
         train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, device = device)
         valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, nclass = nclass, device = device)
+        if scheduler:
+            if get_name_of_scheduler(scheduler) == 'ReduceLROnPlateau':
+                scheduler.step(valid_loss)
+            else:
+                scheduler.step()
 
         if valid_loss < start_loss:
             save_checkpoint({'state_dict': net.state_dict(),

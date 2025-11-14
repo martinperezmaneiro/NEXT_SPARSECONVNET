@@ -138,6 +138,15 @@ if __name__ == '__main__':
                                      betas = parameters.betas,
                                      eps = parameters.eps,
                                      weight_decay = parameters.weight_decay)
+        
+        # Scheduler for the Learning Rate
+        if parameters.scheduler == 'ReduceLROnPlateau':
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
+                                                                   factor = parameters.reduce_lr_factor, 
+                                                                   patience = parameters.patience, 
+                                                                   min_lr = parameters.min_lr)
+        if parameters.scheduler == None:
+            scheduler = None
 
         train_net(nepoch = parameters.nepoch,
                   train_data_path = parameters.train_file,
@@ -148,6 +157,7 @@ if __name__ == '__main__':
                   label_type = parameters.labeltype,
                   criterion = criterion,
                   optimizer = optimizer,
+                  scheduler = scheduler,
                   checkpoint_dir = parameters.checkpoint_dir,
                   tensorboard_dir = parameters.tensorboard_dir,
                   num_workers = parameters.num_workers,
