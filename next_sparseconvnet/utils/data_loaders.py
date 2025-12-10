@@ -160,42 +160,132 @@ def weights_loss(fname, nevents, label_type, effective_number=False, seglabel_na
     elif label_type == LabelType.Classification:
         return weights_loss_classification(fname, effective_number=effective_number)
 
-def transform_input(hits, bin_max, inplace=True):
-    bin_names = ['xbin', 'ybin', 'zbin']
 
-    if not inplace:
-        hits = hits.copy()
-    #mirroring in x, y and z
-    for n, m in zip(bin_names, bin_max):
-        if np.random.randint(2) == 1:
-            hits[n] = m - hits[n]
+def transform_input(hits, bin_max, max_shift = 5, z_transform=False):
+    """
+    hits: pandas DataFrame with columns ['xbin','ybin','zbin','energy']
+    bin_max: list/array [max_x, max_y, max_z]
+    max_shift: max number of voxels that can be shifted
+    z_transform: allow z flips / rotations
+    """
 
-    def possible_rotations(element):
-        x1, x2 = element
-        return ((hits[bin_names[x1]].max()-hits[bin_names[x1]].min()<=bin_max[x2]) and
-                (hits[bin_names[x2]].max()-hits[bin_names[x2]].min()<=bin_max[x1]))
+    cols = ['xbin', 'ybin', 'zbin']
+
+    # ============================================
+    # 1. AXIS FLIPS + SHIFTS
+    # ============================================
+    do_flip = np.random.randint(2, size=3).astype(bool)
+    shift = np.random.randint(-max_shift, max_shift+1, size=3)
+
+    # Disable Z flip if needed
+    if not z_transform:
+        do_flip[2] = False
+        shift[2] = 0
+
+    # Compute new min/max of the translated event
+    new_min = hits[cols].min().values + shift
+    new_max = hits[cols].max().values + shift
+
+    # Check detector boundaries
+    inside = np.all(new_min >= 0) and np.all(new_max <= bin_max)
+
+    # Apply flips (no warnings, DataFrame-safe)
+    for i, col in enumerate(cols):
+        if do_flip[i]:
+            hits.loc[:, col] = bin_max[i] - hits[col]
+        if (shift[i] != 0) & inside: #ensures event is still inside boundaries
+            hits.loc[:, col] = hits[col] + shift[i]
+
+    
+    # ============================================
+    # 2. ROTATION (single swap + flip)
+    # ============================================
     if np.random.randint(2) == 1:
-        rotations_list = list(filter(possible_rotations, itertools.permutations([0, 1, 2], 2)))
-        x1, x2 = rotations_list[np.random.randint(len(rotations_list))]
-        names   = [bin_names[x1], bin_names[x2]]
-        maxbin  = [bin_max[x1], bin_max[x2]]
-        #rotate hits
-        hits[names] = hits[names[::-1]]
-        #flip second axis; this can make bins negative cause maxbin[x1]!=maxbin[x2]
-        hits[names[1]] = maxbin[1]-hits[names[1]]
-        #substract (max_index - maxbin) if it is positive for x1
-        hits[names[0]]-= max(hits[names[0]].max()-maxbin[0], 0)
-        #substract min of 0 and min(hits[names[1]]) to ensure bins are positive for x2
-        hits[names[1]]-= min(hits[names[1]].min(), 0)
-    if not inplace:
-        return hits
 
-def read_event(fname, datid, table='Voxels', group='DATASET', df=True):
-    with tb.open_file(fname) as h5in:
-        hits = h5in.root[group][table].read_where('dataset_id==datid')
-        if df:
-            return pd.DataFrame.from_records(hits)
-        return hits
+        # Possible axis permutations
+        all_pairs = list(itertools.permutations([0,1,2],2))
+
+        # Remove Z involvement if disallowed
+        if not z_transform:
+            all_pairs = [(i,j) for (i,j) in all_pairs if i != 2 and j != 2]
+
+        # Evaluate geometric constraints
+        rot_candidates = []
+        for i, j in all_pairs:
+            rng_i = hits[cols[i]].max() - hits[cols[i]].min()
+            rng_j = hits[cols[j]].max() - hits[cols[j]].min()
+            if rng_i <= bin_max[j] and rng_j <= bin_max[i]:
+                rot_candidates.append((i,j))
+        # Apply one valid rotation
+        if rot_candidates:
+            i, j = rot_candidates[np.random.randint(len(rot_candidates))]
+            col_i, col_j = cols[i], cols[j]
+
+            # -----------------------------------------
+            # Vectorized swap 
+            # -----------------------------------------
+            tmp = hits[col_i].copy()
+            hits.loc[:, col_i] = hits[col_j]
+            hits.loc[:, col_j] = tmp
+
+            # -----------------------------------------
+            # Mirror j-axis
+            # -----------------------------------------
+            hits.loc[:, col_j] = bin_max[j] - hits[col_j]
+
+            # -----------------------------------------
+            # Fix overflow (this was done mainly for when we flipped also in Z, because bin_max for Z was way bigger, now shouldnt be a problem)
+            # -----------------------------------------
+            overflow_i = hits[col_i].max() - bin_max[i]
+            if overflow_i > 0:
+                hits.loc[:, col_i] = hits[col_i] - overflow_i
+
+            # -----------------------------------------
+            # Fix underflow
+            # -----------------------------------------
+            underflow_j = hits[col_j].min()
+            if underflow_j < 0:
+                hits.loc[:, col_j] = hits[col_j] - underflow_j
+
+    return hits
+
+
+# def transform_input(hits, bin_max, inplace=True):
+#     bin_names = ['xbin', 'ybin', 'zbin']
+
+#     if not inplace:
+#         hits = hits.copy()
+#     #mirroring in x, y and z
+#     for n, m in zip(bin_names, bin_max):
+#         if np.random.randint(2) == 1:
+#             hits[n] = m - hits[n]
+
+#     def possible_rotations(element):
+#         x1, x2 = element
+#         return ((hits[bin_names[x1]].max()-hits[bin_names[x1]].min()<=bin_max[x2]) and
+#                 (hits[bin_names[x2]].max()-hits[bin_names[x2]].min()<=bin_max[x1]))
+#     if np.random.randint(2) == 1:
+#         rotations_list = list(filter(possible_rotations, itertools.permutations([0, 1, 2], 2)))
+#         x1, x2 = rotations_list[np.random.randint(len(rotations_list))]
+#         names   = [bin_names[x1], bin_names[x2]]
+#         maxbin  = [bin_max[x1], bin_max[x2]]
+#         #rotate hits
+#         hits[names] = hits[names[::-1]]
+#         #flip second axis; this can make bins negative cause maxbin[x1]!=maxbin[x2]
+#         hits[names[1]] = maxbin[1]-hits[names[1]]
+#         #substract (max_index - maxbin) if it is positive for x1
+#         hits[names[0]]-= max(hits[names[0]].max()-maxbin[0], 0)
+#         #substract min of 0 and min(hits[names[1]]) to ensure bins are positive for x2
+#         hits[names[1]]-= min(hits[names[1]].min(), 0)
+#     if not inplace:
+#         return hits
+
+# def read_event(fname, datid, table='Voxels', group='DATASET', df=True):
+#     with tb.open_file(fname) as h5in:
+#         hits = h5in.root[group][table].read_where('dataset_id==datid')
+#         if df:
+#             return pd.DataFrame.from_records(hits)
+#         return hits
 
 # def read_events_info(filename, nevents):
 #     events = load_dst(filename, 'DATASET', 'EventsInfo')
