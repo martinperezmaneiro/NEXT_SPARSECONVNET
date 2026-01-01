@@ -182,9 +182,10 @@ def transform_input(hits, bin_max, max_shift = 5, z_transform=False):
         do_flip[2] = False
         shift[2] = 0
 
+    coords = hits[cols].to_numpy(dtype=np.int64)
     # Compute new min/max of the translated event
-    new_min = hits[cols].min().values + shift
-    new_max = hits[cols].max().values + shift
+    new_min = coords.min(axis = 0) + shift
+    new_max = coords.max(axis = 0) + shift
 
     # Check detector boundaries
     inside = np.all(new_min >= 0) and np.all(new_max <= bin_max)
