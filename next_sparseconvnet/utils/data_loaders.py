@@ -163,7 +163,7 @@ def weights_loss(fname, nevents, label_type, effective_number=False, seglabel_na
 
 def transform_input(hits, bin_max, max_shift = 5, z_transform=False):
     """
-    hits: pandas DataFrame with columns ['xbin','ybin','zbin','energy']
+    hits: numpy structured ndarray with columns ['xbin','ybin','zbin','energy']
     bin_max: list/array [max_x, max_y, max_z]
     max_shift: max number of voxels that can be shifted
     z_transform: allow z flips / rotations
@@ -191,11 +191,11 @@ def transform_input(hits, bin_max, max_shift = 5, z_transform=False):
     inside = np.all(new_min >= 0) and np.all(new_max <= bin_max)
 
     # Apply flips (no warnings, DataFrame-safe)
-    for i, col in enumerate(cols):
+    for i, c in enumerate(cols):
         if do_flip[i]:
-            hits.loc[:, col] = bin_max[i] - hits[col]
+            hits[c] = bin_max[i] - hits[c]
         if (shift[i] != 0) & inside: #ensures event is still inside boundaries
-            hits.loc[:, col] = hits[col] + shift[i]
+            hits[c] = hits[c] + shift[i]
 
     
     # ============================================
@@ -226,27 +226,27 @@ def transform_input(hits, bin_max, max_shift = 5, z_transform=False):
             # Vectorized swap 
             # -----------------------------------------
             tmp = hits[col_i].copy()
-            hits.loc[:, col_i] = hits[col_j]
-            hits.loc[:, col_j] = tmp
+            hits[col_i] = hits[col_j]
+            hits[col_j] = tmp
 
             # -----------------------------------------
             # Mirror j-axis
             # -----------------------------------------
-            hits.loc[:, col_j] = bin_max[j] - hits[col_j]
+            hits[col_j] = bin_max[j] - hits[col_j]
 
             # -----------------------------------------
             # Fix overflow (this was done mainly for when we flipped also in Z, because bin_max for Z was way bigger, now shouldnt be a problem)
             # -----------------------------------------
             overflow_i = hits[col_i].max() - bin_max[i]
             if overflow_i > 0:
-                hits.loc[:, col_i] = hits[col_i] - overflow_i
+                hits[col_i] = hits[col_i] - overflow_i
 
             # -----------------------------------------
             # Fix underflow
             # -----------------------------------------
             underflow_j = hits[col_j].min()
             if underflow_j < 0:
-                hits.loc[:, col_j] = hits[col_j] - underflow_j
+                hits[col_j] = hits[col_j] - underflow_j
 
     return hits
 
