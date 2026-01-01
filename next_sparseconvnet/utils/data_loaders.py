@@ -192,6 +192,7 @@ def transform_input(hits, bin_max, max_shift = 5, z_transform=False):
 
     # Apply flips (no warnings, DataFrame-safe)
     for i, c in enumerate(cols):
+        hits[c] = hits[c].astype(np.int64, copy=False)
         if do_flip[i]:
             hits[c] = bin_max[i] - hits[c]
         if (shift[i] != 0) & inside: #ensures event is still inside boundaries
