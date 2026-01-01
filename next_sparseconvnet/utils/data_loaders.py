@@ -161,95 +161,83 @@ def weights_loss(fname, nevents, label_type, effective_number=False, seglabel_na
         return weights_loss_classification(fname, effective_number=effective_number)
 
 
-def transform_input(hits, bin_max, max_shift = 5, z_transform=False):
+def transform_input(hits, bin_max, max_shift=5, z_transform=False, inplace=True):
     """
-    hits: numpy structured ndarray with columns ['xbin','ybin','zbin','energy']
+    hits: numpy structured ndarray or pandas DataFrame with columns ['xbin','ybin','zbin','energy']
     bin_max: list/array [max_x, max_y, max_z]
-    max_shift: max number of voxels that can be shifted
-    z_transform: allow z flips / rotations
+    max_shift: max number of voxels to randomly shift the event (default 0 = no shift)
+    z_transform: whether Z flips/rotations are allowed
+    inplace: whether to modify hits in-place (default True)
     """
-
-    cols = ['xbin', 'ybin', 'zbin']
-
-    # ============================================
-    # 1. AXIS FLIPS + SHIFTS
-    # ============================================
-    do_flip = np.random.randint(2, size=3).astype(bool)
-    shift = np.random.randint(-max_shift, max_shift+1, size=3)
-
-    # Disable Z flip if needed
-    if not z_transform:
-        do_flip[2] = False
-        shift[2] = 0
-
-    coords = np.stack([hits[c] for c in cols], axis=1)
-    # Compute new min/max of the translated event
-    new_min = coords.min(axis = 0) + shift
-    new_max = coords.max(axis = 0) + shift
-
-    # Check detector boundaries
-    inside = np.all(new_min >= 0) and np.all(new_max <= bin_max)
-
-    # Apply flips (no warnings, DataFrame-safe)
-    for i, c in enumerate(cols):
-        hits[c] = hits[c].astype(np.int64, copy=False)
-        if do_flip[i]:
-            hits[c] = bin_max[i] - hits[c]
-        if (shift[i] != 0) & inside: #ensures event is still inside boundaries
-            hits[c] = hits[c] + shift[i]
-
     
-    # ============================================
-    # 2. ROTATION (single swap + flip)
-    # ============================================
-    if np.random.randint(2) == 1:
+    bin_names = ['xbin', 'ybin', 'zbin']
+    
+    if not inplace:
+        hits = hits.copy()
+    
+    # -----------------------------
+    # 1. AXIS FLIPS
+    # -----------------------------
+    for i, (name, max_val) in enumerate(zip(bin_names, bin_max)):
+        if i == 2 and not z_transform:
+            continue  # skip Z transformations if not allowed
+        if np.random.randint(2) == 1:
+            hits[name] = max_val - hits[name]
 
-        # Possible axis permutations
-        all_pairs = list(itertools.permutations([0,1,2],2))
-
-        # Remove Z involvement if disallowed
+    # -----------------------------
+    # 1b. RANDOM SHIFTS
+    # -----------------------------
+    if max_shift > 0:
+        shift = np.random.randint(-max_shift, max_shift+1, size=3)
+        # disable Z shift if not allowed
         if not z_transform:
-            all_pairs = [(i,j) for (i,j) in all_pairs if i != 2 and j != 2]
+            shift[2] = 0
+        # apply shift safely (ensure inside detector)
+        new_coords_min = [hits[n].min() + s for n, s in zip(bin_names, shift)]
+        new_coords_max = [hits[n].max() + s for n, s in zip(bin_names, shift)]
+        if all(0 <= new_min and new_max <= bmax for new_min, new_max, bmax in zip(new_coords_min, new_coords_max, bin_max)):
+            for n, s in zip(bin_names, shift):
+                hits[n] += s
 
-        # Evaluate geometric constraints
-        rot_candidates = []
-        for i, j in all_pairs:
-            rng_i = hits[cols[i]].max() - hits[cols[i]].min()
-            rng_j = hits[cols[j]].max() - hits[cols[j]].min()
-            if rng_i <= bin_max[j] and rng_j <= bin_max[i]:
-                rot_candidates.append((i,j))
-        # Apply one valid rotation
-        if rot_candidates:
-            i, j = rot_candidates[np.random.randint(len(rot_candidates))]
-            col_i, col_j = cols[i], cols[j]
+    # -----------------------------
+    # 2. ROTATION (swap + mirror)
+    # -----------------------------
+    do_rotate = np.random.randint(2) == 1
+    if do_rotate:
+        # generate all axis pairs
+        pairs = list(itertools.permutations([0,1,2],2))
+        if not z_transform:
+            pairs = [(i,j) for i,j in pairs if i != 2 and j != 2]
+        
+        # filter valid rotations
+        def possible_rotations(pair):
+            x1, x2 = pair
+            return ((hits[bin_names[x1]].max()-hits[bin_names[x1]].min() <= bin_max[x2]) and
+                    (hits[bin_names[x2]].max()-hits[bin_names[x2]].min() <= bin_max[x1]))
+        
+        valid_pairs = list(filter(possible_rotations, pairs))
+        if valid_pairs:
+            x1, x2 = valid_pairs[np.random.randint(len(valid_pairs))]
+            n1, n2 = bin_names[x1], bin_names[x2]
 
-            # -----------------------------------------
-            # Vectorized swap 
-            # -----------------------------------------
-            tmp = hits[col_i].copy()
-            hits[col_i] = hits[col_j]
-            hits[col_j] = tmp
+            # safe swap (works for pandas or numpy structured array)
+            tmp = hits[n1].copy()
+            hits[n1] = hits[n2].copy()
+            hits[n2] = tmp
 
-            # -----------------------------------------
-            # Mirror j-axis
-            # -----------------------------------------
-            hits[col_j] = bin_max[j] - hits[col_j]
+            # mirror second axis
+            hits[n2] = bin_max[x2] - hits[n2]
 
-            # -----------------------------------------
-            # Fix overflow (this was done mainly for when we flipped also in Z, because bin_max for Z was way bigger, now shouldnt be a problem)
-            # -----------------------------------------
-            overflow_i = hits[col_i].max() - bin_max[i]
-            if overflow_i > 0:
-                hits[col_i] = hits[col_i] - overflow_i
+            # fix overflow/underflow
+            overflow_n1 = hits[n1].max() - bin_max[x1]
+            if overflow_n1 > 0:
+                hits[n1] -= overflow_n1
+            underflow_n2 = hits[n2].min()
+            if underflow_n2 < 0:
+                hits[n2] -= underflow_n2
 
-            # -----------------------------------------
-            # Fix underflow
-            # -----------------------------------------
-            underflow_j = hits[col_j].min()
-            if underflow_j < 0:
-                hits[col_j] = hits[col_j] - underflow_j
-
-    return hits
+    if not inplace:
+        return hits
 
 
 # def transform_input(hits, bin_max, inplace=True):
