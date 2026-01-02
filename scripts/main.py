@@ -15,6 +15,8 @@ import numpy  as np
 import pandas as pd
 import tables as tb
 
+import torch.multiprocessing as mp
+
 from invisible_cities.io.dst_io import df_writer
 # from invisible_cities.cities.components import index_tables
 
@@ -25,6 +27,7 @@ from next_sparseconvnet.utils.data_loaders     import weights_loss
 from next_sparseconvnet.networks.architectures import NetArchitecture
 from next_sparseconvnet.networks.architectures import UNet
 from next_sparseconvnet.networks.architectures import ResNet
+from next_sparseconvnet.networks.architectures import DANN_ResNet
 
 from next_sparseconvnet.utils.train_utils      import train_net
 from next_sparseconvnet.utils.train_utils      import predict_gen
@@ -57,6 +60,7 @@ def get_params(confname):
 
 
 if __name__ == '__main__':
+    mp.set_start_method('spawn', force=True)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print('Device: {}'.format(device))
 
@@ -94,12 +98,23 @@ if __name__ == '__main__':
                      start_planes = parameters.start_planes,
                      momentum = parameters.momentum,
                      nlinear = parameters.nlinear)
+    elif parameters.netarch == NetArchitecture.DANN_ResNet:
+        net = DANN_ResNet(parameters.spatial_size,
+                     parameters.init_conv_nplanes,
+                     parameters.init_conv_kernel,
+                     parameters.kernel_sizes,
+                     parameters.stride_sizes,
+                     parameters.basic_num,
+                     start_planes = parameters.start_planes,
+                     momentum = parameters.momentum,
+                     nlinear = parameters.nlinear)
+        
     net = net.to(device)
 
     print('net constructed')
 
     if parameters.saved_weights:
-        dct_weights = torch.load(parameters.saved_weights)['state_dict']
+        dct_weights = torch.load(parameters.saved_weights, map_location=torch.device(device))['state_dict']
         net.load_state_dict(dct_weights, strict=False)
         print('weights loaded')
 
@@ -132,6 +147,9 @@ if __name__ == '__main__':
             criterion = FocalLoss(alpha=weights, gamma=2.)
         else:
             criterion = torch.nn.CrossEntropyLoss(weight = weights)
+        
+        # Create criterion for domain branch, only used in case of DANN
+        criterion_domain = torch.nn.BCELoss()
 
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()),
                                      lr = parameters.lr,
@@ -139,23 +157,24 @@ if __name__ == '__main__':
                                      eps = parameters.eps,
                                      weight_decay = parameters.weight_decay)
         
+        scheduler = None
         # Scheduler for the Learning Rate
         if parameters.scheduler == 'ReduceLROnPlateau':
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 
                                                                    factor = parameters.reduce_lr_factor, 
                                                                    patience = parameters.patience, 
                                                                    min_lr = parameters.min_lr)
-        if parameters.scheduler == None:
-            scheduler = None
 
         train_net(nepoch = parameters.nepoch,
                   train_data_path = parameters.train_file,
                   valid_data_path = parameters.valid_file,
+                  train_data_domain_path = parameters.train_data_domain_path, # only used for DANN
                   train_batch_size = parameters.train_batch,
                   valid_batch_size = parameters.valid_batch,
                   net = net,
                   label_type = parameters.labeltype,
                   criterion = criterion,
+                  criterion_domain = criterion_domain, # only used for DANN
                   optimizer = optimizer,
                   scheduler = scheduler,
                   checkpoint_dir = parameters.checkpoint_dir,

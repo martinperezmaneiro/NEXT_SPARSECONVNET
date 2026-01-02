@@ -7,8 +7,19 @@ import sparseconvnet as scn
 from .data_loaders import DataGen, collatefn, LabelType, worker_init_fn
 from next_sparseconvnet.networks.architectures import UNet
 from torch.utils.tensorboard import SummaryWriter
-import torch.multiprocessing as mp
 import torch.optim.lr_scheduler as lr_scheduler
+from itertools import cycle
+
+def model_supports_mode(model):
+    sig = inspect.signature(model.forward)
+    return 'mode' in sig.parameters
+
+def log_losses(writer, loss, prefix, step):
+    if isinstance(loss, (list, tuple)):
+        for i, l in enumerate(loss):
+            writer.add_scalar(f"{prefix}_{i}", l, step)
+    else:
+        writer.add_scalar(prefix, loss, step)
 
 def get_name_of_scheduler(scheduler):
     """
@@ -93,7 +104,7 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
 
         t_ = time()
 
-        output = net.forward((coord, ener, batch_size))
+        output = net((coord, ener, batch_size))
 
         print((time() - t_) / 60, ' mins - net forward')
         sys.stdout.flush()
@@ -118,12 +129,13 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
         loss_epoch += loss.item()
 
         t_ = time()
-        softmax = torch.nn.Softmax(dim = 1)
-        prediction = torch.argmax(softmax(output), 1)
-        met_epoch += metrics(label.cpu().numpy(), prediction.cpu().numpy(), nclass=nclass)
-        print((time() - t_) / 60, ' mins - metrics computation')
-        sys.stdout.flush()
-        t_batch = time()
+        with torch.autograd.no_grad():
+            softmax = torch.nn.Softmax(dim = 1)
+            prediction = torch.argmax(softmax(output), 1)
+            met_epoch += metrics(label.cpu().numpy(), prediction.cpu().numpy(), nclass=nclass)
+            print((time() - t_) / 60, ' mins - metrics computation')
+            sys.stdout.flush()
+            t_batch = time()
 
     loss_epoch = loss_epoch / len(loader)
     met_epoch = met_epoch / len(loader)
@@ -134,6 +146,109 @@ def train_one_epoch(epoch_id, net, criterion, optimizer, loader, label_type, ncl
     sys.stdout.flush()
 
     return loss_epoch, met_epoch
+
+def train_one_epoch_dann(
+    epoch_id, 
+    net, 
+    criterion_label,          # CrossEntropy
+    criterion_domain,         # BCEWithLogitsLoss
+    optimizer,
+    loader_mc,                # MC dataloader (labeled)
+    loader_data,              # Data dataloader (unlabeled)
+    nclass=3,
+    device='cuda'
+):
+    """
+    DANN training loop: MC used for labels, MC+Data used for domain.
+    """
+    t_start = time()
+    net.train()
+
+    loss_epoch = 0
+    met_epoch = 0
+
+    # iterate over MC and Data simultaneously
+    # I use cycle() for data as I'm going to have less data instances in general, so it will loop until mc ends
+    for batch_id, ((coord_mc, ener_mc, label_mc, evt_mc),
+                   (coord_dt, ener_dt, _,      evt_dt)) in enumerate(zip(loader_mc, cycle(loader_data))):
+
+        print("\nBatch:", batch_id)
+        sys.stdout.flush()
+        batch_size_mc = len(evt_mc)
+        batch_size_dt = len(evt_dt)
+
+        # ---------------------------
+        # Move tensors to device
+        # ---------------------------
+        ener_mc   = ener_mc.to(device)
+        label_mc  = label_mc.to(device)
+        ener_dt   = ener_dt.to(device)
+
+        optimizer.zero_grad()
+
+        # ==================================================
+        # 1. Classification loss (MC only)
+        # ==================================================
+        out_label = net((coord_mc, ener_mc, batch_size_mc), mode='label')
+        loss_label = criterion_label(out_label, label_mc)
+
+        # ==================================================
+        # 2. Domain loss (MC → domain=1, Data → domain=0)
+        # ==================================================
+
+        # MC → domain=1
+        out_dom_mc = net((coord_mc, ener_mc, batch_size_mc), mode='domain')
+        dom_label_mc = torch.ones((batch_size_mc, 1), device=device)
+        loss_dom_mc = criterion_domain(out_dom_mc, dom_label_mc)
+
+        # Data → domain=0
+        out_dom_dt = net((coord_dt, ener_dt, batch_size_dt), mode='domain')
+        dom_label_dt = torch.zeros((batch_size_dt, 1), device=device)
+        loss_dom_dt = criterion_domain(out_dom_dt, dom_label_dt)
+
+        # average the domain loss
+        loss_domain = 0.5 * (loss_dom_mc + loss_dom_dt)
+
+        # ==================================================
+        # 3. Combined loss
+        # ==================================================
+        loss = loss_label + loss_domain
+
+        # Backprop
+        loss.backward()
+        optimizer.step()
+
+        # accumulate loss
+        loss_epoch += loss.item()
+        loss_label_epoch += loss_label.item()
+        loss_domain_epoch += loss_domain.item()
+
+        # ==================================================
+        # 4. Metrics (MC only)
+        # ==================================================
+        with torch.no_grad():
+            softmax = torch.nn.Softmax(dim = 1)
+            pred = torch.argmax(softmax(out_label), 1)
+            met_epoch += accuracy(label_mc.cpu().numpy(),
+                                  pred.cpu().numpy(), nclass=nclass)
+            
+            domain_acc_mc = ((out_dom_mc > 0.5).float() == 1).float().mean().item()
+            domain_acc_dt = ((out_dom_dt > 0.5).float() == 0).float().mean().item()
+
+            met_domain_epoch += 0.5 * (domain_acc_mc + domain_acc_dt)
+
+    # normalize
+    n_batches = len(loader_mc) # min(len(loader_mc), len(loader_data)) # I use the mc loader because data loader will loop until mc loader ends
+    loss_label_epoch /= n_batches
+    loss_domain_epoch /= n_batches
+
+    met_epoch /= n_batches
+    met_domain_epoch /= n_batches
+
+    print(f"\nEpoch {epoch_id} | Loss={loss_epoch:.4f} | Acc={met_epoch:.4f} | Domain Acc= {met_domain_epoch:.4f} | Time={(time()-t_start)/60:.2f} min")
+    sys.stdout.flush()
+
+    return [loss_label_epoch, loss_domain_epoch], [met_epoch, met_domain_epoch]
 
 
 def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, device = 'cuda'):
@@ -156,7 +271,9 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, device = 'cu
             batch_size = len(event)
             ener, label = ener.to(device), label.to(device)
 
-            output = net.forward((coord, ener, batch_size))
+            # In the case of a DANN architecture, we always validate with mode = 'label',
+            # but as it is the default mode, we don't add here a condition
+            output = net((coord, ener, batch_size))
 
             loss = criterion(output, label)
 
@@ -197,6 +314,8 @@ def train_net(*,
               checkpoint_dir,
               tensorboard_dir,
               num_workers,
+              train_data_domain_path = None,
+              criterion_domain = None,
               nevents_train = None,
               nevents_valid = None,
               augmentation  = False,
@@ -207,13 +326,20 @@ def train_net(*,
     """
         Trains the net nepoch times and saves the model anytime the validation loss decreases
     """
-    mp.set_start_method('spawn', force=True)
-    t = time()
-    train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name, feature_name = feature_name)
-    valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name, feature_name = feature_name)
-
+    # flag to know if the net is DANN or not
+    use_dann = getattr(net, "is_dann", False)
+    if use_dann:
+        assert train_data_domain_path is not None, "train_data_domain_path required for DANN"
+        assert criterion_domain is not None, "criterion_domain required for DANN"
+    
     if device == 'cuda': pin_mem = True
     else: pin_mem = False
+
+    met_name = 'iou' if label_type == LabelType.Segmentation else 'acc'
+
+    t = time()
+    train_gen = DataGen(train_data_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name, feature_name = feature_name)
+    valid_gen = DataGen(valid_data_path, label_type, nevents = nevents_valid, seglabel_name = seglabel_name, feature_name = feature_name)    
 
     loader_train = torch.utils.data.DataLoader(train_gen,
                                                batch_size = train_batch_size,
@@ -226,21 +352,38 @@ def train_net(*,
                                                worker_init_fn = worker_init_fn)
     loader_valid = torch.utils.data.DataLoader(valid_gen,
                                                batch_size = valid_batch_size,
-                                               shuffle = True,
+                                               shuffle = False,
                                                num_workers = 1,
                                                collate_fn = collatefn,
-                                               drop_last = True,
+                                               drop_last = False,
                                                pin_memory = pin_mem, 
                                                persistent_workers = True,
                                                worker_init_fn = worker_init_fn)
+    # LOAD NON LABELLED DATA IN CASE WE USE DANN
+    if use_dann:
+        train_domain_gen = DataGen(train_data_domain_path, label_type, nevents = nevents_train, augmentation = augmentation, seglabel_name = seglabel_name, feature_name = feature_name)
+        loader_domain_train = torch.utils.data.DataLoader(train_domain_gen,
+                                                            batch_size = train_batch_size,
+                                                            shuffle = True,
+                                                            num_workers = num_workers,
+                                                            collate_fn = collatefn,
+                                                            drop_last = True,
+                                                            pin_memory = pin_mem, 
+                                                            persistent_workers = True,
+                                                            worker_init_fn = worker_init_fn)
+
 
     print('Data loaded ({:.2f} min)'.format((time() - t) / 60))
     
     start_loss = np.inf
     writer = SummaryWriter(tensorboard_dir)
     for i in range(nepoch):
-        train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, device = device)
+        if use_dann:
+            train_loss, train_met = train_one_epoch_dann(i, net, criterion, criterion_domain, optimizer, loader_train, loader_domain_train, label_type, nclass = nclass, device = device)
+        else:
+            train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, device = device)
         valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, nclass = nclass, device = device)
+            
         if scheduler:
             if get_name_of_scheduler(scheduler) == 'ReduceLROnPlateau':
                 scheduler.step(valid_loss)
@@ -252,16 +395,11 @@ def train_net(*,
                              'optimizer': optimizer.state_dict()}, f'{checkpoint_dir}/net_checkpoint_{i}.pth.tar')
             start_loss = valid_loss
 
-        writer.add_scalar('loss/train', train_loss, i)
-        writer.add_scalar('loss/valid', valid_loss, i)
-        if label_type == LabelType.Segmentation:
-            for k, iou in enumerate(train_met):
-                writer.add_scalar(f'iou/train_{k}class', iou, i)
-            for k, iou in enumerate(valid_met):
-                writer.add_scalar(f'iou/valid_{k}class', iou, i)
-        elif label_type == LabelType.Classification:
-            writer.add_scalar('acc/train', train_met, i)
-            writer.add_scalar('acc/valid', valid_met, i)
+        log_losses(writer, train_loss, 'loss/train', i)
+        log_losses(writer, valid_loss, 'loss/valid', i)
+        log_losses(writer, train_met, met_name + '/train', i)
+        log_losses(writer, valid_met, met_name + '/valid', i)
+
         writer.flush()
     writer.close()
 
@@ -307,7 +445,7 @@ def predict_gen(data_path, net, label_type, batch_size, nevents, seglabel_name =
         for batchid, (coord, ener, label, event) in enumerate(loader):
             batch_size = len(event)
             ener, label = ener.to(device), label.to(device)
-            output = net.forward((coord, ener, batch_size))
+            output = net((coord, ener, batch_size))
             y_pred = softmax(output).cpu().detach().numpy()
 
             if label_type == LabelType.Classification:

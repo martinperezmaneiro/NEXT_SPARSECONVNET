@@ -1,6 +1,24 @@
 import torch
 import sparseconvnet as scn
+from torch.autograd import Function
 
+# Gradient Reversal Layer definition
+class GradientReversal(Function):
+    @staticmethod
+    def forward(ctx, x, lambda_):
+        ctx.lambda_ = lambda_
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return -ctx.lambda_ * grad_output, None
+
+class GradientReversalLayer(torch.nn.Module):
+    def __init__(self, lambda_=1.0):
+        super().__init__()
+        self.lambda_ = lambda_
+    def forward(self, x):
+        return GradientReversal.apply(x, self.lambda_)
 
 class ResidualBlock_downsample(torch.nn.Module):
     def __init__(self, inplanes, kernel, stride, bias = False, dim = 3, momentum = 0.99):
