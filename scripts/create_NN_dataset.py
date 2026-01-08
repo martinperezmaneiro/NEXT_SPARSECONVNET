@@ -107,6 +107,7 @@ if __name__ == "__main__":
                 df['energy'] = df.groupby('dataset_id')['energy'].apply(lambda x: x / x.sum())
             start_id += len(eventInfo)
             index_count += len(df)
+            df = df.merge(eventInfo[['dataset_id', 'binclass']])
             # Write the voxels of each file
             with tb.open_file(savefile, 'a') as h5out:
                 dio.df_writer(h5out, df       , 'DATASET', 'Voxels'    , columns_to_index=['dataset_id'], compression = "ZLIB4")
