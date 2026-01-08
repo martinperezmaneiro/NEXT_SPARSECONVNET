@@ -164,8 +164,8 @@ def train_one_epoch_dann(
     t_start = time()
     net.train()
 
-    loss_epoch = 0
-    met_epoch = 0
+    loss_epoch, loss_label_epoch, loss_domain_epoch = 0, 0, 0
+    met_epoch, met_domain_epoch = 0, 0
 
     # iterate over MC and Data simultaneously
     # I use cycle() for data as I'm going to have less data instances in general, so it will loop until mc ends
@@ -379,7 +379,7 @@ def train_net(*,
     writer = SummaryWriter(tensorboard_dir)
     for i in range(nepoch):
         if use_dann:
-            train_loss, train_met = train_one_epoch_dann(i, net, criterion, criterion_domain, optimizer, loader_train, loader_domain_train, label_type, nclass = nclass, device = device)
+            train_loss, train_met = train_one_epoch_dann(i, net, criterion, criterion_domain, optimizer, loader_train, loader_domain_train, nclass = nclass, device = device)
         else:
             train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, device = device)
         valid_loss, valid_met = valid_one_epoch(net, criterion, loader_valid, label_type, nclass = nclass, device = device)
