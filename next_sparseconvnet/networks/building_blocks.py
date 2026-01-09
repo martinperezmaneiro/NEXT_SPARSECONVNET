@@ -14,7 +14,7 @@ class GradientReversal(Function):
         return -ctx.lambda_ * grad_output, None
 
 class GradientReversalLayer(torch.nn.Module):
-    def __init__(self, lambda_=1.0):
+    def __init__(self, lambda_=0.0):
         super().__init__()
         self.lambda_ = lambda_
     def forward(self, x):

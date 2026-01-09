@@ -387,7 +387,7 @@ class ResNet(torch.nn.Module):
         return x
     
 class DANN_ResNet(torch.nn.Module):
-    def __init__(self, spatial_size, init_conv_nplanes, init_conv_kernel, kernel_sizes, stride_sizes, basic_num, dim = 3, start_planes = 1, momentum = 0.99, nlinear=32, nclasses=2, lambda_=1.0):
+    def __init__(self, spatial_size, init_conv_nplanes, init_conv_kernel, kernel_sizes, stride_sizes, basic_num, dim = 3, start_planes = 1, momentum = 0.99, nlinear=32, nclasses=2):
         super().__init__()
         self.is_dann = True
         self.feature_extractor = ResNet_FeatureExtractor(spatial_size, init_conv_nplanes, init_conv_kernel, kernel_sizes, stride_sizes, basic_num, dim = dim, start_planes = start_planes, momentum = momentum)
@@ -397,7 +397,9 @@ class DANN_ResNet(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Linear(nlinear, nclasses)
         )
-        self.domain_classifier = torch.nn.Sequential(GradientReversalLayer(lambda_),
+        self.grl = GradientReversalLayer(lambda_ = 0.0)
+
+        self.domain_classifier = torch.nn.Sequential(self.grl,
                                 torch.nn.Linear(self.feature_extractor.out_dim, nlinear),
                                 torch.nn.ReLU(),
                                 torch.nn.Linear(nlinear, 1),

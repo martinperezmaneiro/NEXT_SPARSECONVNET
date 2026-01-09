@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import torch
 import sys
 import inspect
@@ -298,7 +299,9 @@ def valid_one_epoch(net, criterion, loader, label_type, nclass = 3, device = 'cu
 def save_checkpoint(state, filename='checkpoint.pth.tar'):
     torch.save(state, filename)
 
-
+def dann_lambda(step, max_steps, lambda_max=0.1, gamma=15.0):
+    p = step / max_steps
+    return lambda_max * (2.0 / (1.0 + math.exp(-gamma * p)) - 1.0)
 
 def train_net(*,
               nepoch,
@@ -379,6 +382,8 @@ def train_net(*,
     writer = SummaryWriter(tensorboard_dir)
     for i in range(nepoch):
         if use_dann:
+            lambda_ = dann_lambda(i, nepoch)
+            net.grl.lambda_ = lambda_
             train_loss, train_met = train_one_epoch_dann(i, net, criterion, criterion_domain, optimizer, loader_train, loader_domain_train, nclass = nclass, device = device)
         else:
             train_loss, train_met = train_one_epoch(i, net, criterion, optimizer, loader_train, label_type, nclass = nclass, device = device)
