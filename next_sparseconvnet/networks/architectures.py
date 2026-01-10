@@ -356,9 +356,9 @@ class ResNet(torch.nn.Module):
 
         self.feature_extractor = ResNet_FeatureExtractor(spatial_size, init_conv_nplanes, init_conv_kernel, kernel_sizes, stride_sizes, basic_num, dim = dim, start_planes = start_planes, momentum = momentum)
         inplanes = self.feature_extractor.out_dim
-        self.linear1 = torch.nn.Linear(inplanes, nlinear)
-        self.linear2 = torch.nn.Linear(nlinear, nclasses)
-        self.activation = torch.nn.ReLU()
+        self.label_classifier = torch.nn.Sequential(torch.nn.Linear(inplanes, nlinear), 
+                                                    torch.nn.ReLU(), 
+                                                    torch.nn.Linear(nlinear, nclasses))
 
     def forward(self, x):
         '''
@@ -380,9 +380,7 @@ class ResNet(torch.nn.Module):
         x = self.feature_extractor(x)
 
         # classifier
-        x = self.linear1(x)
-        x = self.activation(x)
-        x = self.linear2(x)
+        x = self.label_classifier(x)
 
         return x
     
