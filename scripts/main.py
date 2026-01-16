@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     if parameters.saved_weights:
         dct_weights = torch.load(parameters.saved_weights, map_location=torch.device(device))['state_dict']
-        net.load_state_dict(dct_weights, strict=False)
+        net.load_state_dict(dct_weights, strict=True) # True, to notice in case I try to read an old resnet checkpoint
         print('weights loaded')
 
         if parameters.freeze_weights:

@@ -22,16 +22,17 @@ from next_sparseconvnet.networks.architectures import ResNet
 from next_sparseconvnet.utils.train_utils      import save_checkpoint
 
 from time import time
-from next_sparseconvnet.utils.data_loaders import LabelType
 from torch.utils.tensorboard import SummaryWriter
 import torch.optim.lr_scheduler as lr_scheduler
 
 from next_sparseconvnet.utils.weight_train_utils import load_data, train_domain, valid_domain, train_label, valid_label
+from next_sparseconvnet.utils.weight_train_utils import save_features_and_weights
 from next_sparseconvnet.utils.train_utils import get_name_of_scheduler, log_losses
+from next_sparseconvnet.utils.data_loaders import load_resnet_checkpoint_safely
 
 
 def is_valid_action(parser, arg):
-    if not arg in ['train', 'predict']:
+    if not arg in ['train_domain', 'train_label', 'save_features']:
         parser.error("The action %s is not allowed!" % arg)
     else:
         return arg
@@ -93,8 +94,10 @@ if __name__ == '__main__':
     net = net.to(device)
     print('ResNet constructed')
     # LOAD SAVED RESNET
-    dct_weights = torch.load(parameters.resnet_saved_weights, map_location=torch.device(device))['state_dict']
-    net.load_state_dict(dct_weights, strict=False)
+    net = load_resnet_checkpoint_safely(net, parameters.resnet_saved_weights, device=device)
+    # regular way to read
+    # dct_weights = torch.load(parameters.resnet_saved_weights, map_location=torch.device(device))['state_dict']
+    # net.load_state_dict(dct_weights, strict=True)
     print('weights loaded from trained ResNet')
     # FREEZE RESNET FEATURE EXTRACTOR
     for p in net.feature_extractor.parameters():
@@ -151,10 +154,10 @@ if __name__ == '__main__':
                                                                     patience = parameters.patience, 
                                                                     min_lr = parameters.min_lr)
 
-        t_start = time()
         start_loss = np.inf
         writer = SummaryWriter(parameters.tensorboard_domain_dir)
         for i in range(nepoch):
+            t_start = time()
             train_loss, train_met_mc, train_met_dt = train_domain(net, domain_clf, loader_train_mc, loader_train_dt, optimizer_domain, criterion_domain, device)
             valid_loss, valid_met_mc, valid_met_dt = valid_domain(net, domain_clf, loader_valid_mc, loader_valid_dt,                   criterion_domain, device)
 
@@ -167,6 +170,7 @@ if __name__ == '__main__':
             print(f"\nEpoch {i} |  TRAINING  | Loss ={train_loss:.4f} | Domain MC Acc= {train_met_mc:.4f} | Domain DT Acc= {train_met_dt:.4f} | Time={(time()-t_start)/60:.2f} min")
             sys.stdout.flush()
             print(f"\nEpoch {i} | VALIDATION | Loss ={valid_loss:.4f} | Domain MC Acc= {valid_met_mc:.4f} | Domain DT Acc= {valid_met_dt:.4f}")
+            sys.stdout.flush()
 
             if valid_loss < start_loss:
                 save_checkpoint({'state_dict': domain_clf.state_dict(), # save the domain classifier
@@ -193,7 +197,7 @@ if __name__ == '__main__':
             p.requires_grad = False
         print('weights loaded and freezed from trained domain classifier')
 
-        criterion_label = torch.nn.CrossEntropyLoss(weight = parameters.weight_loss, reduction = 'none')
+        criterion_label = torch.nn.CrossEntropyLoss(weight = torch.Tensor(parameters.weight_loss).to(device), reduction = 'none')
 
         optimizer_label = torch.optim.Adam(filter(lambda p: p.requires_grad, net.label_classifier.parameters()), # PASS ONLY LABEL HEAD PARAMETERS
                                      lr = parameters.lr,
@@ -208,10 +212,10 @@ if __name__ == '__main__':
                                                                     factor = parameters.reduce_lr_factor, 
                                                                     patience = parameters.patience, 
                                                                     min_lr = parameters.min_lr)
-        t_start = time()
         start_loss = np.inf
         writer = SummaryWriter(parameters.tensorboard_weighted_dir)
         for i in range(nepoch):
+            t_start = time()
             train_wloss, train_loss, train_met, train_weights = train_label(net, domain_clf, loader_train_mc, optimizer_label, criterion_label, device, w_min=0.1, w_max=10.0)
             valid_wloss, valid_loss, valid_met, valid_weights = valid_label(net, domain_clf, loader_valid_mc, criterion_label, device)
             # Two losses, for the net to learn we want to use the training weighted loss, but
@@ -227,19 +231,41 @@ if __name__ == '__main__':
             print(f"\nEpoch {i} |  TRAINING  | Weighted Loss ={train_wloss:.4f} | Normal Loss ={train_loss:.4f} | Acc= {train_met:.4f} | Time={(time()-t_start)/60:.2f} min")
             sys.stdout.flush()
             print(f"\nEpoch {i} | VALIDATION | Weighted Loss ={valid_wloss:.4f} | Normal Loss ={valid_loss:.4f} | Acc= {valid_met:.4f}")
+            sys.stdout.flush()
 
             if valid_loss < start_loss:
                 save_checkpoint({'state_dict': net.state_dict(), # save resnet with the updated label classifier part
                                 'optimizer': optimizer_label.state_dict()}, f'{parameters.checkpoint_weighted_dir}/net_weighted_checkpoint_{i}.pth.tar')
                 start_loss = valid_loss
 
-            writer.add_histogram("weights/train", torch.cat(train_weights), i)
-            writer.add_histogram("weights/valid", torch.cat(valid_weights), i)
+            writer.add_histogram("weights/train", train_weights, i)
+            writer.add_histogram("weights/valid", valid_weights, i)
             log_losses(writer, train_wloss, 'wloss/train', i)
             log_losses(writer, valid_wloss, 'wloss/valid', i)
             log_losses(writer, train_loss, 'loss/train', i)
             log_losses(writer, valid_loss, 'loss/valid', i)
             log_losses(writer, train_met, met_name + '/train', i)
             log_losses(writer, valid_met, met_name + '/valid', i)
+
+    if action == 'save_features':
+        dct_dom_weights = torch.load(parameters.domain_clf_saved_weights, map_location=torch.device(device))['state_dict']
+        domain_clf.load_state_dict(dct_dom_weights, strict=True)
+        
+        for p in domain_clf.parameters():
+            p.requires_grad = False
+        print('weights loaded and freezed from trained domain classifier')
+
+        save_features_and_weights(
+                                net,
+                                domain_clf,
+                                loader_train_mc,
+                                loader_train_dt,
+                                device,
+                                save_path=parameters.save_feat_path,
+                                w_min=0.1,
+                                w_max=10.0,
+                                save_event_ids=True
+                            )
+
 
 

@@ -114,6 +114,8 @@ def worker_init_fn(worker_id): # Required by PyTorch
     sys.stdout.flush()
     worker_info = torch.utils.data.get_worker_info()
     dataset = worker_info.dataset  # This is your DataGen instance
+    if isinstance(dataset, torch.utils.data.Subset):
+        dataset = dataset.dataset
     dataset.initialize_file()      # Pre-open file in the worker
 
 def weights_loss_segmentation(fname, nevents, effective_number=False, beta=0.9999, seglabel_name = 'segclass'):
@@ -340,3 +342,79 @@ def read_events(fname, nevents=None, table='Voxels', group='DATASET', df=True):
             raise ValueError("nevents must be None, an integer, or a (start, end) tuple/list")
 
         return pd.DataFrame.from_records(hits) if df else hits
+
+
+def load_resnet_checkpoint_safely(model, checkpoint_path, device="cpu"):
+    """
+    Loads a checkpoint into `model`.
+
+    1) Tries direct load (same architecture)
+    2) If that fails, attempts automatic remapping
+    3) Verifies no missing / unexpected keys remain
+
+    Raises RuntimeError if loading is unsafe.
+    """
+
+    print(f"\nLoading checkpoint: {checkpoint_path}")
+    ckpt = torch.load(checkpoint_path, map_location=device)
+
+    # Support both raw state_dict and wrapped checkpoints
+    if isinstance(ckpt, dict) and "state_dict" in ckpt:
+        state_dict = ckpt["state_dict"]
+    else:
+        state_dict = ckpt
+
+    try:
+        model.load_state_dict(state_dict, strict=True)
+        print("Checkpoint loaded directly (matching architecture)")
+        return model
+    except RuntimeError as e:
+        print("Direct load failed, attempting remapping...")
+        print(e)
+
+    remapped_sd = {}
+    used_keys = set()
+
+    for k, v in state_dict.items():
+
+        # Feature extractor
+        if k.startswith((
+            "convBN", "basic", "downsample", "bottom",
+            "inp", "max", "sparse"
+        )):
+            new_k = "feature_extractor." + k
+            remapped_sd[new_k] = v
+            used_keys.add(k)
+
+        # Label classifier
+        elif k.startswith("linear1"):
+            new_k = "label_classifier.0" + k[len("linear1"):]
+            remapped_sd[new_k] = v
+            used_keys.add(k)
+
+        elif k.startswith("linear2"):
+            new_k = "label_classifier.2" + k[len("linear2"):]
+            remapped_sd[new_k] = v
+            used_keys.add(k)
+
+    unused = set(state_dict.keys()) - used_keys
+    if unused:
+        print("Unused checkpoint keys:")
+        for k in sorted(unused):
+            print("   ", k)
+
+    missing, unexpected = model.load_state_dict(remapped_sd, strict=False)
+
+    if missing or unexpected:
+        print("\n Unsafe checkpoint load")
+        print("Missing keys:")
+        for k in missing:
+            print("  ", k)
+        print("Unexpected keys:")
+        for k in unexpected:
+            print("  ", k)
+        raise RuntimeError("Checkpoint remapping incomplete")
+
+    print("Checkpoint loaded via remapping")
+    return model
+
