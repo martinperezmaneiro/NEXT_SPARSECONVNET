@@ -291,13 +291,14 @@ def save_features_and_weights(
     # -------------------------------
     Z_mc_list = []
     W_mc_list = []
+    label_mc_list = []
     evt_ids_mc = []
 
     net.eval()
     domain_clf.eval()
     
     with torch.no_grad():
-        for coord_mc, ener_mc, _, evt_mc in loader_mc:
+        for coord_mc, ener_mc, label_mc, evt_mc in loader_mc:
             bs = len(evt_mc)
             ener_mc = ener_mc.to(device)
 
@@ -311,11 +312,13 @@ def save_features_and_weights(
 
             Z_mc_list.append(feat.cpu())
             W_mc_list.append(w.cpu())
+            label_mc_list.append(label_mc.cpu())
             if save_event_ids:
                 evt_ids_mc.append(evt_mc.cpu() if isinstance(evt_mc, torch.Tensor) else torch.tensor(evt_mc))
 
     Z_mc = torch.cat(Z_mc_list)
     W_mc = torch.cat(W_mc_list)
+    label_mc = torch.cat(label_mc_list)
     if save_event_ids:
         evt_ids_mc = torch.cat(evt_ids_mc)
     else:
@@ -342,6 +345,7 @@ def save_features_and_weights(
     save_dict = {
         "Z_mc": Z_mc,
         "W_mc": W_mc,
+        "label_mc": label_mc,
         "Z_data": Z_data
     }
     if save_event_ids:
