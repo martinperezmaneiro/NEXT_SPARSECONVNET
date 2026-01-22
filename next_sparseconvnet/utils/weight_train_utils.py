@@ -291,8 +291,9 @@ def save_features_and_weights(
     # -------------------------------
     Z_mc_list = []
     W_mc_list = []
+    domain_p_mc_list, domain_p_dt_list = [], []
     label_mc_list = []
-    evt_ids_mc = []
+    evt_ids_mc, evt_ids_dt = [], []
 
     net.eval()
     domain_clf.eval()
@@ -312,12 +313,14 @@ def save_features_and_weights(
 
             Z_mc_list.append(feat.cpu())
             W_mc_list.append(w.cpu())
+            domain_p_mc_list.append(p_data.cpu())
             label_mc_list.append(label_mc.cpu())
             if save_event_ids:
                 evt_ids_mc.append(evt_mc.cpu() if isinstance(evt_mc, torch.Tensor) else torch.tensor(evt_mc))
 
     Z_mc = torch.cat(Z_mc_list)
     W_mc = torch.cat(W_mc_list)
+    domain_p_mc = torch.cat(domain_p_mc_list)
     label_mc = torch.cat(label_mc_list)
     if save_event_ids:
         evt_ids_mc = torch.cat(evt_ids_mc)
@@ -335,9 +338,16 @@ def save_features_and_weights(
             ener_data = ener_data.to(device)
 
             feat = net.feature_extractor((coord_data, ener_data, bs))
+            p_data = torch.sigmoid(domain_clf(feat))
             Z_data_list.append(feat.cpu())
+            domain_p_dt_list.append(p_data.cpu())
+            if save_event_ids:
+                evt_ids_dt.append(evt_data.cpu() if isinstance(evt_data, torch.Tensor) else torch.tensor(evt_mc))
 
     Z_data = torch.cat(Z_data_list)
+    domain_p_dt = torch.cat(domain_p_dt_list)
+    if save_event_ids:
+        evt_ids_dt = torch.cat(evt_ids_dt)
 
     # -------------------------------
     # Save everything
@@ -345,11 +355,14 @@ def save_features_and_weights(
     save_dict = {
         "Z_mc": Z_mc,
         "W_mc": W_mc,
+        "dom_p_mc": domain_p_mc,
         "label_mc": label_mc,
-        "Z_data": Z_data
+        "Z_data": Z_data,
+        "dom_p_dt":domain_p_dt
     }
     if save_event_ids:
         save_dict["evt_ids_mc"] = evt_ids_mc
+        save_dict["evt_ids_dt"] = evt_ids_dt
 
     torch.save(save_dict, save_path)
     print(f"Features and weights saved to {save_path} | MC: {Z_mc.shape[0]} events, Data: {Z_data.shape[0]} events")

@@ -145,11 +145,13 @@ def weights_loss_classification(fname, effective_number=False, beta=0.9999):
     with tb.open_file(fname, 'r') as h5in:
         binclass   = h5in.root.DATASET.EventsInfo.cols.binclass[:]
 
+    ntot = len(binclass)
     nsignal = binclass.sum()
-    nbackground = len(binclass)-nsignal
+    nbackground = ntot-nsignal
     freq = np.array([nbackground, nsignal])
     if not effective_number:
-        return freq/sum(freq)
+        freq = ntot / freq
+        return freq / freq.mean()
     else:
         effective_num = 1.0 - np.power(beta, freq)
         weights = (1.0 - beta) / np.array(effective_num)
