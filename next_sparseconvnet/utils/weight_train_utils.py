@@ -162,6 +162,7 @@ def valid_domain(net, domain_clf, loader_mc, loader_dt, criterion, device):
 
 def train_label(
     net,
+    domain_fe, 
     domain_clf,
     loader_mc,
     optimizer,
@@ -170,13 +171,14 @@ def train_label(
     w_min=0.1,
     w_max=10.0
 ):
-    net.label_classifier.train()
-    net.feature_extractor.eval()
+    net.train()
+    domain_fe.eval()
     domain_clf.eval()
 
     wloss_epoch = 0.0
     loss_epoch = 0.0
     acc_epoch = 0.0
+    wacc_epoch = 0.0
     n_batches = 0
     
     for coord_mc, ener_mc, label_mc, evt_mc in loader_mc:
@@ -191,9 +193,9 @@ def train_label(
         # Frozen feature space
         # --------------------------------
         with torch.no_grad():
-            feat = net.feature_extractor((coord_mc, ener_mc, bs))
-            p_data = torch.sigmoid(domain_clf(feat))
+            p_data = torch.sigmoid(domain_clf(domain_fe((coord_mc, ener_mc, bs))))
             weights = p_data / (1.0 - p_data + 1e-6)
+            weights = weights / weights.mean().detach()
             weights = torch.clamp(weights, w_min, w_max).view(-1)
         
         # collect weights for histogram
@@ -203,10 +205,10 @@ def train_label(
         # --------------------------------
         # Label prediction
         # --------------------------------
-        logits = net.label_classifier(feat)
+        logits = net((coord_mc, ener_mc, bs))
 
         loss_evt = criterion(logits, label_mc)
-        weighted_loss = (weights * loss_evt).sum() / (weights.sum() + 1e-6)
+        weighted_loss = (weights * loss_evt).mean()
 
         weighted_loss.backward()
         optimizer.step()
@@ -215,50 +217,57 @@ def train_label(
         # Metrics
         # --------------------------------
         with torch.no_grad():
-            acc = (logits.argmax(1) == label_mc).float().mean().item()
+            correct = (logits.argmax(1) == label_mc).float()
+            acc = correct.mean().item()
+            wacc = (weights * correct).sum() / (weights.sum() + 1e-6)
 
         wloss_epoch += weighted_loss.item()
         loss_epoch += loss_evt.mean().item()
         acc_epoch += acc
+        wacc_epoch += wacc
         n_batches += 1
 
     return (
         wloss_epoch / n_batches,
         loss_epoch / n_batches,
         acc_epoch / n_batches,
+        wacc_epoch / n_batches,
         epoch_weights
     )
 
 
 @torch.no_grad()
-def valid_label(net, domain_clf, loader, criterion, device):
+def valid_label(net, domain_fe, domain_clf, loader, criterion, device):
     net.eval()
+    domain_fe.eval()
     domain_clf.eval()
 
-    total_wloss, total_loss, total_acc, n = 0.0, 0.0, 0.0, 0
+    total_wloss, total_loss, total_acc, total_wacc, n = 0.0, 0.0, 0.0, 0.0, 0
 
     for batch_id, (coord, ener, label, evt) in enumerate(loader):
         bs = len(evt)
         ener = ener.to(device)
         label = label.to(device)
 
-        feat = net.feature_extractor((coord, ener, bs))
-        p_data = torch.sigmoid(domain_clf(feat))
+        p_data = torch.sigmoid(domain_clf(domain_fe((coord, ener, bs))))
+        w = w / w.mean().detach()
         w = torch.clamp(p_data / (1 - p_data + 1e-6), 0.1, 10.0).view(-1)
 
         if batch_id == 0:
             epoch_weights = w.detach().cpu()
 
-        logits = net.label_classifier(feat)
+        logits = net((coord, ener, bs))
         loss_evt = criterion(logits, label)
-        weighted_loss = (w * loss_evt).sum() / (w.sum() + 1e-6)
+        weighted_loss = (w * loss_evt).mean()
 
         total_wloss += weighted_loss.item()
         total_loss += loss_evt.mean().item()
-        total_acc += (logits.argmax(1) == label).float().mean().item()
+        correct = (logits.argmax(1) == label).float()
+        total_acc += correct.mean().item()
+        total_wacc += (w * correct).sum() / (w.sum() + 1e-6)
         n += 1
 
-    return total_wloss/n, total_loss/n, total_acc/n, epoch_weights
+    return total_wloss/n, total_loss/n, total_acc/n, total_wacc/n, epoch_weights
 
 
 def save_features_and_weights(

@@ -190,17 +190,47 @@ if __name__ == '__main__':
 
     if action == 'train_label':
 
+        if parameters.random_label_cls:
+            print("Reinitializing label classifier weights")
+            for layer in net.label_classifier:
+                if hasattr(layer, "reset_parameters"):
+                    layer.reset_parameters()
+
+        if parameters.unfreeze_feature_extractor:
+            print("Unfreezing last part of the feature extractor for label head")
+            for p in net.feature_extractor.bottom.parameters():
+                p.requires_grad = True
+
         dct_dom_weights = torch.load(parameters.domain_clf_saved_weights, map_location=torch.device(device))['state_dict']
-        domain_clf.load_state_dict(dct_dom_weights, strict=False)
+        domain_clf.load_state_dict(dct_dom_weights, strict=True)
         
         for p in domain_clf.parameters():
             p.requires_grad = False
         print('weights loaded and freezed from trained domain classifier')
 
+        net_dom = ResNet(parameters.spatial_size,
+                    parameters.init_conv_nplanes,
+                    parameters.init_conv_kernel,
+                    parameters.kernel_sizes,
+                    parameters.stride_sizes,
+                    parameters.basic_num,
+                    start_planes = parameters.start_planes,
+                    momentum = parameters.momentum,
+                    nlinear = parameters.nlinear).to(device)
+        net_dom = load_resnet_checkpoint_safely(net_dom, parameters.resnet_saved_weights, device=device)
+        for p in net_dom.feature_extractor.parameters():
+            p.requires_grad = False
+            print('Load again ResNet and freeze feature extractor to use it to compute weights')
+        domain_fe = net_dom.feature_extractor
+
         criterion_label = torch.nn.CrossEntropyLoss(weight = torch.Tensor(parameters.weight_loss).to(device), reduction = 'none')
 
-        optimizer_label = torch.optim.Adam(filter(lambda p: p.requires_grad, net.label_classifier.parameters()), # PASS ONLY LABEL HEAD PARAMETERS
-                                     lr = parameters.lr,
+        # ADAPTAR ESTO CON 2 LEARNING RATES DISTINTOS PARA CADA PARTE
+        optimizer_label = torch.optim.Adam( #filter(lambda p: p.requires_grad, net.parameters()),
+                                     [
+                                        {"params": net.label_classifier.parameters(), "lr": parameters.lr},
+                                        {"params": net.feature_extractor.bottom.parameters(), "lr": parameters.lr * 0.1},
+                                     ],
                                      betas = parameters.betas,
                                      eps = parameters.eps,
                                      weight_decay = parameters.weight_decay)
@@ -216,27 +246,27 @@ if __name__ == '__main__':
         writer = SummaryWriter(parameters.tensorboard_weighted_dir)
         for i in range(nepoch):
             t_start = time()
-            train_wloss, train_loss, train_met, train_weights = train_label(net, domain_clf, loader_train_mc, optimizer_label, criterion_label, device, w_min=0.1, w_max=10.0)
-            valid_wloss, valid_loss, valid_met, valid_weights = valid_label(net, domain_clf, loader_valid_mc, criterion_label, device)
+            train_wloss, train_loss, train_met, train_wmet, train_weights = train_label(net, domain_fe, domain_clf, loader_train_mc, optimizer_label, criterion_label, device, w_min=0.1, w_max=10.0)
+            valid_wloss, valid_loss, valid_met, valid_wmet, valid_weights = valid_label(net, domain_fe, domain_clf, loader_valid_mc, criterion_label, device)
             # Two losses, for the net to learn we want to use the training weighted loss, but
             # for the validation, we want the model to still be stable, so we use regular 
             # validation loss instead
 
             if scheduler:
                 if get_name_of_scheduler(scheduler) == 'ReduceLROnPlateau':
-                    scheduler.step(valid_loss)
+                    scheduler.step(valid_wloss)
                 else:
                     scheduler.step()
 
-            print(f"\nEpoch {i} |  TRAINING  | Weighted Loss ={train_wloss:.4f} | Normal Loss ={train_loss:.4f} | Acc= {train_met:.4f} | Time={(time()-t_start)/60:.2f} min")
+            print(f"\nEpoch {i} |  TRAINING  | Weighted Loss ={train_wloss:.4f} | Normal Loss ={train_loss:.4f} | Acc= {train_met:.4f} | Weighted acc= {train_wmet:.4f} | Time={(time()-t_start)/60:.2f} min")
             sys.stdout.flush()
-            print(f"\nEpoch {i} | VALIDATION | Weighted Loss ={valid_wloss:.4f} | Normal Loss ={valid_loss:.4f} | Acc= {valid_met:.4f}")
+            print(f"\nEpoch {i} | VALIDATION | Weighted Loss ={valid_wloss:.4f} | Normal Loss ={valid_loss:.4f} | Acc= {valid_met:.4f} | Weighted Acc= {valid_wmet:.4f}")
             sys.stdout.flush()
 
-            if valid_loss < start_loss:
+            if valid_wloss < start_loss:
                 save_checkpoint({'state_dict': net.state_dict(), # save resnet with the updated label classifier part
                                 'optimizer': optimizer_label.state_dict()}, f'{parameters.checkpoint_weighted_dir}/net_weighted_checkpoint_{i}.pth.tar')
-                start_loss = valid_loss
+                start_loss = valid_wloss
 
             writer.add_histogram("weights/train", train_weights, i)
             writer.add_histogram("weights/valid", valid_weights, i)
