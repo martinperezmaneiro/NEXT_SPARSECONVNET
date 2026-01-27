@@ -250,8 +250,9 @@ def valid_label(net, domain_fe, domain_clf, loader, criterion, device):
         label = label.to(device)
 
         p_data = torch.sigmoid(domain_clf(domain_fe((coord, ener, bs))))
+        w = p_data / (1 - p_data + 1e-6)
         w = w / w.mean().detach()
-        w = torch.clamp(p_data / (1 - p_data + 1e-6), 0.1, 10.0).view(-1)
+        w = torch.clamp(w, 0.1, 10.0).view(-1)
 
         if batch_id == 0:
             epoch_weights = w.detach().cpu()
