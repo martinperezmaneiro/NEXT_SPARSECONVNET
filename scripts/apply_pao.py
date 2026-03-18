@@ -296,6 +296,11 @@ initial = bins_info[['min_x', 'min_y', 'min_z']].values
 label_reco = pd.read_hdf(labelfile, 'DATASET/RecoVoxels')
 label_hits = pd.read_hdf(labelfile, 'DATASET/MCHits') 
 
+# Correct id label
+min_id = events_info_thr[events_info_thr.label_basename == labelfile.split('/')[-1]].dataset_id.min()
+label_reco['dataset_id'] = label_reco['dataset_id'] + min_id
+label_hits['dataset_id'] = label_hits['dataset_id'] + min_id
+
 true_extremes = label_hits[label_hits.extlabel != 0].pivot(index='dataset_id', columns = 'extlabel', values=['x', 'y', 'z'])
 true_extremes.columns = [f"{col}{int(i)}" for col, i in true_extremes.columns]
 true_extremes = true_extremes.reset_index() 
