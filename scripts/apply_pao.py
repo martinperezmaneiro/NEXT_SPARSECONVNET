@@ -132,8 +132,8 @@ def voxel_in_blob(track_graph, extreme, rad, spacing): # distances,
             blob_voxels.append(v)
     return blob_voxels
 
-def voxel_pos(voxels):
-    return [np.array(v) for v in voxels]
+def voxel_pos(t):
+    return [np.array(v) for v in t]
 
 def voxel_ener(t, voxels):
     return [t.nodes[v]['energy'] for v in voxels]
@@ -148,7 +148,7 @@ def barycenter(t, voxels):
 def vox_to_coord(vox_index, spacing, initial):
     return initial + vox_index * spacing
 
-def get_blobs(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array([15.55, 15.55, 10]), initial = np.array([-500, -500, 0]), pos_to_coord = True):
+def get_track_info(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array([15.55, 15.55, 10]), initial = np.array([-500, -500, 0]), pos_to_coord = True):
     dat_id = event.dataset_id.values[0]
     binclass = event.binclass.values[0]
 
@@ -189,7 +189,16 @@ def get_blobs(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array([15.
             eblob1, eblob2, eext1, eext2, posext1, posext2, bary1, bary2, voxblob1, voxblob2, posblob1, posblob2 = Ea, Eb, Eexta, Eextb, a, b, ba, bb, va_, vb_, ca, cb
         if pos_to_coord:
             posext1, posext2, bary1, bary2, posblob1, posblob2 = vox_to_coord([posext1, posext2, bary1, bary2, posblob1, posblob2], spacing, initial)
-        track_info.append([dat_id, tID, binclass,
+
+        # Compute some values
+        coords = vox_to_coord(voxel_pos(t), spacing, initial)
+        rmax = max([np.sqrt(c[0]**2 + c[1]**2) for c in coords])
+        min_ = coords.min(axis = 0)
+        max_ = coords.max(axis = 0)
+
+        track_info.append([dat_id, tID, binclass, rmax, 
+                           min_[0], min_[1], min_[2],
+                           max_[0], max_[1], max_[2],
                             eext1, eext2, ext_ovlp,
                             posext1[0], posext1[1], posext1[2], 
                             posext2[0], posext2[1], posext2[2],
@@ -199,7 +208,7 @@ def get_blobs(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array([15.
                             posblob1[0], posblob1[1], posblob1[2], 
                             posblob2[0], posblob2[1], posblob2[2]])
 
-    return pd.DataFrame(track_info, columns = ['dataset_id', 'trackID', 'binclass',
+    return pd.DataFrame(track_info, columns = ['dataset_id', 'trackID', 'binclass', 'rmax', 'xmin', 'ymin', 'zmin', 'xmax', 'ymax', 'zmax',
                                                                                         'eext1', 'eext2', 'ext_ovlp',
                                                                                         'ext1_x', 'ext1_y', 'ext1_z', #positions of the found extremes (directly)
                                                                                         'ext2_x', 'ext2_y', 'ext2_z', 
@@ -312,13 +321,13 @@ labelinfopred = events_info_thr[np.isin(events_info_thr.dataset_id, label_reco.d
 label_reco = label_reco.merge(voxels_pred[['dataset_id', 'xbin', 'ybin', 'zbin', 'class_1', 'threshold']])
 
 # Apply the Paolina-like function to the whole events
-track_info = label_reco.groupby('dataset_id', group_keys = False).apply(get_blobs, contiguity, rad, spacing, initial, pos_to_coord) 
+track_info = label_reco.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
 
 # Apply the threshold and redistribute energy
 label_reco_thr = label_reco.groupby('dataset_id', group_keys=False).apply(make_thr_cut_voxel, "zbin")
 
 # Apply the Paolina-like function to the thresholded events
-track_info_thr = label_reco_thr.groupby('dataset_id', group_keys = False).apply(get_blobs, contiguity, rad, spacing, initial, pos_to_coord) 
+track_info_thr = label_reco_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
 
 
 bins_info.to_hdf(savefile, key = 'DATASET/BinsInfo', mode = 'a', append= True, complib="zlib", complevel=4)
