@@ -20,10 +20,28 @@ def get_args():
         type=int,
         required=True,
         help="Number of the labelled file")
+    parser.add_argument(
+        "-d", "-datatype", "--datatype",
+        dest="dt",
+        type=str,
+        default="MC",
+        required=True,
+        help="Type of data"
+    )
+    parser.add_argument(
+        "-e", "-events", "--events",
+        dest="nevents_per_file",
+        type=int,
+        default=0,
+        required=True,
+        help="Number of events per file (for run data)"
+    )
     return parser.parse_args()
 
 args = get_args()
 nfile = args.nfile
+dt = args.dt
+nevents_per_file = args.nevents_per_file
 
 # VARIABLES
 rad = 21
@@ -32,6 +50,7 @@ pos_to_coord = True
 
 # ------------------------PATHS------------------------------------
 
+# MC
 # File that contains voxels with decolabel score (class_1)
 test_file_pred = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/trains/soph_deco/train_D/pred_file.h5'
 
@@ -43,6 +62,11 @@ test_file_thr = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib
 labelfile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/208Tl/prod/PORT_1a/label/prod/sophronia_label_{n}_208Tl.h5'.format(n=nfile)
 
 savefile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/208Tl/prod/PORT_1a/label/pao/pao_{n}_208Tl.h5'.format(n=nfile)
+
+# DATA
+datafile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/trains/soph_deco/train_D/dataset_15607_DEP_deco.h5'
+savedatafile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/trains/soph_deco/train_D/deconvolved_pao/pao/pao_{n}_15607.h5'.format(n=nfile)
+
 
 # ---------------------- PAO FUNCTIONS----------------------------------
 
@@ -148,12 +172,12 @@ def barycenter(t, voxels):
 def vox_to_coord(vox_index, spacing, initial):
     return initial + vox_index * spacing
 
-def get_track_info(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array([15.55, 15.55, 10]), initial = np.array([-500, -500, 0]), pos_to_coord = True):
+def get_track_info(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array([15.55, 15.55, 10]), initial = np.array([-500, -500, 0]), pos_to_coord = True, columns = ['xbin', 'ybin', 'zbin', 'energy', 'nhits']):
     dat_id = event.dataset_id.values[0]
     binclass = event.binclass.values[0]
 
 
-    tracks = sorted(make_track_graphs(event, contiguity, spacing = spacing), key = get_track_energy, reverse=True)
+    tracks = sorted(make_track_graphs(event, contiguity, spacing = spacing, columns = columns), key = get_track_energy, reverse=True)
     track_info = []
     for tID, t in enumerate(tracks):
         
@@ -287,52 +311,86 @@ def make_thr_cut_voxel(df: pd.DataFrame, zslice: str = 'zbin'):
     df = merge_NN_voxel(df, "energy")
     return df.drop('pass', axis = 1)
 
+
+def event_range(N, B, nfile):
+    start = (nfile - 1) * B
+    end = min(start + B, N)
+    return np.arange(start, end, 1)
+
+
 # ---------------------START SCRIPT---------------------------------
 
-# Read bins info, the predicted voxels and the best threshold for them
-voxels_pred = pd.read_hdf(test_file_pred, 'DATASET/VoxelsPred')
-bins_info = pd.read_hdf(test_file_thr, 'DATASET/BinsInfo') 
-events_info_thr = pd.read_hdf(test_file_thr, 'DATASET/EventsInfo')
+if dt == "MC":
+    # Read bins info, the predicted voxels and the best threshold for them
+    voxels_pred = pd.read_hdf(test_file_pred, 'DATASET/VoxelsPred')
+    bins_info = pd.read_hdf(test_file_thr, 'DATASET/BinsInfo') 
+    events_info_thr = pd.read_hdf(test_file_thr, 'DATASET/EventsInfo')
 
-# Add threshold to the voxel file
-voxels_pred = voxels_pred.merge(events_info_thr[['dataset_id', 'threshold', 'event_id']])
+    # Add threshold to the voxel file
+    voxels_pred = voxels_pred.merge(events_info_thr[['dataset_id', 'threshold', 'event_id']])
 
-spacing = bins_info[['size_x', 'size_y', 'size_z']].values
-initial = bins_info[['min_x', 'min_y', 'min_z']].values
-
-
-# Read the labelled voxels and hits
-label_reco = pd.read_hdf(labelfile, 'DATASET/RecoVoxels')
-label_hits = pd.read_hdf(labelfile, 'DATASET/MCHits') 
-
-# Correct id label
-min_id = events_info_thr[events_info_thr.label_basename == labelfile.split('/')[-1]].dataset_id.min()
-label_reco['dataset_id'] = label_reco['dataset_id'] + min_id
-label_hits['dataset_id'] = label_hits['dataset_id'] + min_id
-
-true_extremes = label_hits[label_hits.extlabel != 0].pivot(index='dataset_id', columns = 'extlabel', values=['x', 'y', 'z'])
-true_extremes.columns = [f"{col}{int(i)}" for col, i in true_extremes.columns]
-true_extremes = true_extremes.reset_index() 
-
-# Summary of the per event info with threshold
-labelinfopred = events_info_thr[np.isin(events_info_thr.dataset_id, label_reco.dataset_id.unique())][['dataset_id', 'binclass', 'total_energy', 'threshold', 'event_id']] 
-
-# Adding the reco labelled voxels the class_1 and threshold information
-label_reco = label_reco.merge(voxels_pred[['dataset_id', 'xbin', 'ybin', 'zbin', 'class_1', 'threshold']])
-
-# Apply the Paolina-like function to the whole events
-track_info = label_reco.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
-
-# Apply the threshold and redistribute energy
-label_reco_thr = label_reco.groupby('dataset_id', group_keys=False).apply(make_thr_cut_voxel, "zbin")
-
-# Apply the Paolina-like function to the thresholded events
-track_info_thr = label_reco_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
+    spacing = bins_info[['size_x', 'size_y', 'size_z']].values
+    initial = bins_info[['min_x', 'min_y', 'min_z']].values
 
 
-bins_info.to_hdf(savefile, key = 'DATASET/BinsInfo', mode = 'a', append= True, complib="zlib", complevel=4)
-true_extremes.to_hdf(savefile, key = 'DATASET/ExtPos', mode = 'a', append= True, complib="zlib", complevel=4)
-labelinfopred.to_hdf(savefile, key = 'DATASET/EventInfo', mode = 'a', append= True, complib="zlib", complevel=4)
-track_info.to_hdf(savefile, key = 'DATASET/TrackInfo', mode = 'a', append= True, complib="zlib", complevel=4)
-track_info_thr.to_hdf(savefile, key = 'DATASET/TrackInfoThr', mode = 'a', append= True, complib="zlib", complevel=4)
+    # Read the labelled voxels and hits
+    label_reco = pd.read_hdf(labelfile, 'DATASET/RecoVoxels')
+    label_hits = pd.read_hdf(labelfile, 'DATASET/MCHits') 
+
+    # Correct id label
+    min_id = events_info_thr[events_info_thr.label_basename == labelfile.split('/')[-1]].dataset_id.min()
+    label_reco['dataset_id'] = label_reco['dataset_id'] + min_id
+    label_hits['dataset_id'] = label_hits['dataset_id'] + min_id
+
+    true_extremes = label_hits[label_hits.extlabel != 0].pivot(index='dataset_id', columns = 'extlabel', values=['x', 'y', 'z'])
+    true_extremes.columns = [f"{col}{int(i)}" for col, i in true_extremes.columns]
+    true_extremes = true_extremes.reset_index() 
+
+    # Summary of the per event info with threshold
+    labelinfopred = events_info_thr[np.isin(events_info_thr.dataset_id, label_reco.dataset_id.unique())][['dataset_id', 'binclass', 'total_energy', 'threshold', 'event_id']] 
+
+    # Adding the reco labelled voxels the class_1 and threshold information
+    label_reco = label_reco.merge(voxels_pred[['dataset_id', 'xbin', 'ybin', 'zbin', 'class_1', 'threshold']])
+
+    # Apply the Paolina-like function to the whole events
+    track_info = label_reco.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
+
+    # Apply the threshold and redistribute energy
+    label_reco_thr = label_reco.groupby('dataset_id', group_keys=False).apply(make_thr_cut_voxel, "zbin")
+
+    # Apply the Paolina-like function to the thresholded events
+    track_info_thr = label_reco_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
+
+
+    bins_info.to_hdf(savefile, key = 'DATASET/BinsInfo', mode = 'a', append= True, complib="zlib", complevel=4)
+    true_extremes.to_hdf(savefile, key = 'DATASET/ExtPos', mode = 'a', append= True, complib="zlib", complevel=4)
+    labelinfopred.to_hdf(savefile, key = 'DATASET/EventInfo', mode = 'a', append= True, complib="zlib", complevel=4)
+    track_info.to_hdf(savefile, key = 'DATASET/TrackInfo', mode = 'a', append= True, complib="zlib", complevel=4)
+    track_info_thr.to_hdf(savefile, key = 'DATASET/TrackInfoThr', mode = 'a', append= True, complib="zlib", complevel=4)
+
+if dt == 'data':
+    data_info = pd.read_hdf(datafile, 'DATASET/EventsInfo')
+    data_bins = pd.read_hdf(datafile, 'DATASET/BinsInfo')
+    data_voxels = pd.read_hdf(datafile, 'DATASET/Voxels')
+
+    evt_rng = event_range(len(data_info), nevents_per_file, nfile)
+
+    data_info = data_info[np.isin(data_info.dataset_id, evt_rng)]
+    data_voxels = data_voxels[np.isin(data_voxels.dataset_id, evt_rng)]
+
+    spacing = data_bins[['size_x', 'size_y', 'size_z']].values
+    initial = data_bins[['min_x', 'min_y', 'min_z']].values
+
+    data_voxels = data_voxels.merge(data_info[['dataset_id', 'threshold', 'total_energy']]).rename(columns = {'decoscore':'class_1'})
+    data_voxels['energy'] = data_voxels['energy'] * data_voxels['total_energy']
+
+    track_info = data_voxels.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord, ['xbin', 'ybin', 'zbin', 'energy', 'energy']) 
+    data_voxels_thr = data_voxels.groupby('dataset_id', group_keys=False).apply(make_thr_cut_voxel, "zbin")
+    track_info_thr = data_voxels_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord, ['xbin', 'ybin', 'zbin', 'energy', 'energy']) 
+
+    data_bins.to_hdf(savedatafile, key = 'DATASET/BinsInfo', mode = 'a', append= True, complib="zlib", complevel=4)
+    data_info.to_hdf(savedatafile, key = 'DATASET/EventInfo', mode = 'a', append= True, complib="zlib", complevel=4)
+    track_info.to_hdf(savedatafile, key = 'DATASET/TrackInfo', mode = 'a', append= True, complib="zlib", complevel=4)
+    track_info_thr.to_hdf(savedatafile, key = 'DATASET/TrackInfoThr', mode = 'a', append= True, complib="zlib", complevel=4)
+
 
