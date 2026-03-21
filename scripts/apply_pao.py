@@ -36,11 +36,20 @@ def get_args():
         required=True,
         help="Number of events per file (for run data)"
     )
+    parser.add_argument(
+        "-r", "-run_n", "--run_n",
+        dest="run_n",
+        type=int,
+        default=15607,
+        required=True,
+        help="Run number"
+        )
     return parser.parse_args()
 
 args = get_args()
 nfile = args.nfile
 dt = args.dt
+run_n = args.run_n
 nevents_per_file = args.nevents_per_file
 
 # VARIABLES
@@ -64,8 +73,8 @@ labelfile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4ba
 savefile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/208Tl/prod/PORT_1a/label/pao/pao_{n}_208Tl.h5'.format(n=nfile)
 
 # DATA
-datafile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/trains/soph_deco/train_D/dataset_15607_DEP_deco.h5'
-savedatafile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/trains/soph_deco/train_D/deconvolved_pao/pao/pao_{n}_15607.h5'.format(n=nfile)
+datafile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/trains/soph_deco/train_D/dataset_{run_n}_DEP_deco.h5'.format(run_n = run_n)
+savedatafile = '/mnt/lustre/scratch/nlsas/home/usc/ie/mpm/NEXT100/data/HE_calib/4bar/trains/soph_deco/train_D/deconvolved_pao/pao/pao_{n}_{run_n}.h5'.format(n=nfile, run_n = run_n)
 
 
 # ---------------------- PAO FUNCTIONS----------------------------------
