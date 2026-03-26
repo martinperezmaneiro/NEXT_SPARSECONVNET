@@ -10,6 +10,7 @@ import argparse
 
 import numpy as np
 import pandas as pd
+import tables as tb
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -380,12 +381,15 @@ if dt == "MC":
 if dt == 'data':
     data_info = pd.read_hdf(datafile, 'DATASET/EventsInfo')
     data_bins = pd.read_hdf(datafile, 'DATASET/BinsInfo')
-    data_voxels = pd.read_hdf(datafile, 'DATASET/Voxels')
+    # data_voxels = pd.read_hdf(datafile, 'DATASET/Voxels')
 
     evt_rng = event_range(len(data_info), nevents_per_file, nfile)
 
     data_info = data_info[np.isin(data_info.dataset_id, evt_rng)]
-    data_voxels = data_voxels[np.isin(data_voxels.dataset_id, evt_rng)]
+    stridx, endidx = data_info.stridx.values[0], data_info.endidx.values[-1]
+    data_voxels = pd.DataFrame(tb.open_file(datafile, 'r').root.DATASET.Voxels[stridx:endidx])
+
+    # data_voxels = data_voxels[np.isin(data_voxels.dataset_id, evt_rng)]
 
     spacing = data_bins[['size_x', 'size_y', 'size_z']].values
     initial = data_bins[['min_x', 'min_y', 'min_z']].values
