@@ -39,8 +39,8 @@ def get_args():
     parser.add_argument(
         "-r", "-run_n", "--run_n",
         dest="run_n",
-        type=int,
-        default=15607,
+        type=str,
+        default='15607',
         required=True,
         help="Run number"
         )
