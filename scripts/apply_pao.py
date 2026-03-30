@@ -54,7 +54,8 @@ run_n = args.run_n
 nevents_per_file = args.nevents_per_file
 
 # VARIABLES
-rad = 21
+radext = 62 #30 #42 #21
+radblb = 21
 contiguity = np.sqrt(3)
 pos_to_coord = True
 
@@ -182,7 +183,7 @@ def barycenter(t, voxels):
 def vox_to_coord(vox_index, spacing, initial):
     return initial + vox_index * spacing
 
-def get_track_info(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array([15.55, 15.55, 10]), initial = np.array([-500, -500, 0]), pos_to_coord = True, columns = ['xbin', 'ybin', 'zbin', 'energy', 'nhits']):
+def get_track_info(event, contiguity =  np.sqrt(3), radext = 21, radblb = 21, spacing = np.array([15.55, 15.55, 10]), initial = np.array([-500, -500, 0]), pos_to_coord = True, columns = ['xbin', 'ybin', 'zbin', 'energy', 'nhits']):
     dat_id = event.dataset_id.values[0]
     binclass = event.binclass.values[0]
 
@@ -196,8 +197,8 @@ def get_track_info(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array
         a, b, _ = find_extrema_and_length(distances)
 
         # Pick the voxels of each blob given an extreme and a radius
-        va = voxel_in_blob(t, a, rad, spacing)
-        vb = voxel_in_blob(t, b, rad, spacing)
+        va = voxel_in_blob(t, a, radext, spacing)
+        vb = voxel_in_blob(t, b, radext, spacing)
 
         Eexta, Eextb = sum(voxel_ener(t, va)), sum(voxel_ener(t, vb))
         ext_ovlp = sum(voxel_ener(t, set(va).intersection(set(vb))))
@@ -207,8 +208,8 @@ def get_track_info(event, contiguity =  np.sqrt(3), rad = 21, spacing = np.array
         bb = barycenter(t, vb)
 
         # Using the new barycenter, take again all the voxels within a radius, to obtain the final blob
-        va_ = voxel_in_blob(t, ba, rad, spacing)
-        vb_ = voxel_in_blob(t, bb, rad, spacing)
+        va_ = voxel_in_blob(t, ba, radblb, spacing)
+        vb_ = voxel_in_blob(t, bb, radblb, spacing)
 
         # Compute finl barycenter as the center blob position
         ca = barycenter(t, va_)
@@ -363,13 +364,13 @@ if dt == "MC":
     label_reco = label_reco.merge(voxels_pred[['dataset_id', 'xbin', 'ybin', 'zbin', 'class_1', 'threshold']])
 
     # Apply the Paolina-like function to the whole events
-    track_info = label_reco.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
+    track_info = label_reco.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, radext, radblb, spacing, initial, pos_to_coord) 
 
     # Apply the threshold and redistribute energy
     label_reco_thr = label_reco.groupby('dataset_id', group_keys=False).apply(make_thr_cut_voxel, "zbin")
 
     # Apply the Paolina-like function to the thresholded events
-    track_info_thr = label_reco_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord) 
+    track_info_thr = label_reco_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, radext, radblb, spacing, initial, pos_to_coord) 
 
 
     bins_info.to_hdf(savefile, key = 'DATASET/BinsInfo', mode = 'a', append= True, complib="zlib", complevel=4)
@@ -397,9 +398,9 @@ if dt == 'data':
     data_voxels = data_voxels.merge(data_info[['dataset_id', 'threshold', 'total_energy']]).rename(columns = {'decoscore':'class_1'})
     data_voxels['energy'] = data_voxels['energy'] * data_voxels['total_energy']
 
-    track_info = data_voxels.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord, ['xbin', 'ybin', 'zbin', 'energy', 'energy']) 
+    track_info = data_voxels.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, radext, radblb, spacing, initial, pos_to_coord, ['xbin', 'ybin', 'zbin', 'energy', 'energy']) 
     data_voxels_thr = data_voxels.groupby('dataset_id', group_keys=False).apply(make_thr_cut_voxel, "zbin")
-    track_info_thr = data_voxels_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, rad, spacing, initial, pos_to_coord, ['xbin', 'ybin', 'zbin', 'energy', 'energy']) 
+    track_info_thr = data_voxels_thr.groupby('dataset_id', group_keys = False).apply(get_track_info, contiguity, radext, radblb, spacing, initial, pos_to_coord, ['xbin', 'ybin', 'zbin', 'energy', 'energy']) 
 
     data_bins.to_hdf(savedatafile, key = 'DATASET/BinsInfo', mode = 'a', append= True, complib="zlib", complevel=4)
     data_info.to_hdf(savedatafile, key = 'DATASET/EventInfo', mode = 'a', append= True, complib="zlib", complevel=4)
